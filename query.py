@@ -3,44 +3,49 @@ import freesound
 import os
 import torchaudio
 import torch
+import pickle
 
-from common import CLASSES_LIST, SAMPLERATE
+from common import SAMPLERATE
 
 client = freesound.FreesoundClient()
 api_token = os.environ.get("FREESOUND_TOKEN")
 client.set_token(api_token, auth_type="oauth")
 
-page = 2
+# page_size = 15
+MAX_PAGE=5
+OUTDIR= "./sounds/"
 extension = "wav"
+tags={}
+for page in range(1, MAX_PAGE+1):
+    if not os.path.exists(OUTDIR):
+        os.makedirs(OUTDIR)
 
-for tag in CLASSES_LIST:
-    outdir = f"./sounds/{tag}/"
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
-
-    results = client.text_search(query=tag, filter=f"duration:[0 TO 30] type:{extension} tag:{tag}", page=page)
+    results = client.text_search(query="", filter=f"duration:[0 TO 30] type:{extension}", page=page, fields="id,name,tags", sort="downloads_desc")
 
     for sound in results:
         filename = f"{sound.id}.{extension}"
-        filepath = f"{outdir}{filename}"
-        while True:
-            try:
-                if not os.path.exists(filepath):
-                    sound.retrieve(outdir, name=filename)
+        filepath = f"{OUTDIR}{filename}"
+        if not os.path.exists(filepath):
+            while True:
+                try:
+                    sound.retrieve(OUTDIR, name=filename)
+                    break
+                except (ContentTooShortError, OSError):
+                    print("got download error, trying again")
 
-                    print(sound.name)
-                break
-            except (ContentTooShortError, OSError):
-                print("got download error, trying again")
+            waveform, samplerate = torchaudio.load(filepath)
+            resampler = torchaudio.transforms.Resample(orig_freq=samplerate, new_freq=SAMPLERATE)
+            waveform = resampler(waveform)
+            if len(waveform) > 1:
+                new_waveform = torch.zeros(1, waveform.shape[1])
+                for i in range(waveform.shape[1]):
+                    new_waveform[0, i] = torch.mean(waveform[:, i])
+                waveform = new_waveform
+            
+            torchaudio.save(filepath, waveform, SAMPLERATE)
+            print(f"{sound.id}: {sound.name}")
+            tags[int(sound.id)] = sound.tags
 
-        waveform, samplerate = torchaudio.load(filepath)
-        resampler = torchaudio.transforms.Resample(orig_freq=samplerate, new_freq=SAMPLERATE)
-        waveform = resampler(waveform)
-        if len(waveform) > 1:
-            new_waveform = torch.zeros(1, waveform.shape[1])
-            for i in range(waveform.shape[1]):
-                new_waveform[0, i] = torch.mean(waveform[:, i])
-            waveform = new_waveform
-        
-        torchaudio.save(filepath, waveform, SAMPLERATE)
 
+with open(f"./tags.pickle", "wb") as f:
+    pickle.dump(tags, f)
