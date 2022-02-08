@@ -1,21 +1,77 @@
 import torch
+from torch.utils.data import random_split, DataLoader
 import pickle
 import common
 
 class AudioClassifierModule(torch.nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.linear = torch.nn.Linear(common.FEATURE_SIZE, 1)
+        self.linear = torch.nn.Linear(common.FEATURE_SIZE, len(common.CLASSES_LIST))
     
     def forward(self, x):
         return self.linear(x)
 
 
-# criterion = torch.nn.NLLLoss()
 model = AudioClassifierModule()
-print(model)
-# optimizer = torch.optim.SGD(model.parameters())
+
+learning_rate = 1e-3
+batch_size = 64
+
+# TODO handle different sampling rates
+
+# pred = model(torch.rand(common.FEATURE_SIZE))
+# sm = torch.nn.Softmax(dim=0)
+# result = sm(pred)
 
 datapath = "./data.pickle"
 with open(datapath, "rb") as f:
     dataset = pickle.load(f)
+
+data_lengths = (round(len(dataset) * 0.9), round(len(dataset) * 0.1))
+train_data, test_data = random_split(dataset, data_lengths)
+
+train_dataloader = DataLoader(train_data, batch_size=batch_size)
+test_dataloader = DataLoader(test_data, batch_size=batch_size)
+
+def train_loop(dataloader, model, loss_fn, optimizer):
+    size = len(dataloader.dataset)
+    for batch, (X, y) in enumerate(dataloader):
+        # Compute prediction and loss
+        pred = model(X)
+        loss = loss_fn(pred, y)
+
+        # Backpropagation
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        if batch % 100 == 0:
+            loss, current = loss.item(), batch * len(X)
+            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+
+
+def test_loop(dataloader, model, loss_fn):
+    size = len(dataloader.dataset)
+    num_batches = len(dataloader)
+    test_loss, correct = 0, 0
+
+    with torch.no_grad():
+        for X, y in dataloader:
+            pred = model(X)
+            test_loss += loss_fn(pred, y).item()
+            correct += (pred.argmax(1) == y).type(torch.float).sum().item()
+
+    test_loss /= num_batches
+    correct /= size
+    print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
+
+loss_fn = torch.nn.CrossEntropyLoss()
+optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+
+epochs = 10
+for t in range(epochs):
+    print(f"Epoch {t+1}\n-------------------------------")
+    train_loop(train_dataloader, model, loss_fn, optimizer)
+    test_loop(test_dataloader, model, loss_fn)
+print("Done!")
+

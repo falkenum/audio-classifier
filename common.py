@@ -23,7 +23,7 @@ class AudioClassDataset(Dataset):
         return self.data[:, index], self.labels[index]
 
     def __len__(self):
-        return len(self.data)
+        return self.data.shape[1]
     
     def add_samples(self, data, label, id):
         self.data = torch.cat((self.data, data), 1)
