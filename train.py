@@ -22,9 +22,7 @@ batch_size = 64
 # pred = model(torch.rand(common.FEATURE_SIZE))
 # sm = torch.nn.Softmax(dim=0)
 # result = sm(pred)
-
-datapath = "./data.pickle"
-with open(datapath, "rb") as f:
+with open(common.DATAPATH, "rb") as f:
     dataset = pickle.load(f)
 
 data_lengths = (round(len(dataset) * 0.9), round(len(dataset) * 0.1))

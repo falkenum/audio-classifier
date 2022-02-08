@@ -6,11 +6,12 @@ import pathlib
 CLASSES_LIST = ["bass", "percussion", "guitar", "trumpet", "violin"]
 CLASSES_MAP = {i: CLASSES_LIST[i] for i in range(len(CLASSES_LIST))}
 CLASSES_MAP_REV = {v: k for k, v in CLASSES_MAP.items()}
+SAMPLERATE = 48000
 
-
+DATAPATH = "./data.pickle"
 SOUNDSDIR = pathlib.Path("./sounds")
-TRANSFORM = torchaudio.transforms.Spectrogram()
-FEATURE_SIZE = TRANSFORM.n_fft // 2 + 1
+FFT_SIZE = 1024
+FEATURE_SIZE = FFT_SIZE // 2 + 1
 
 class AudioClassDataset(Dataset):
     def __init__(self):

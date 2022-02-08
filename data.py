@@ -2,29 +2,50 @@ import pickle
 import torch
 import torchaudio
 import os
-from common import AudioClassDataset, SOUNDSDIR, TRANSFORM, CLASSES_MAP_REV
+import threading
+from common import AudioClassDataset, SOUNDSDIR, CLASSES_MAP_REV, FFT_SIZE, DATAPATH
 dataset = AudioClassDataset()
 
-datapath = "./data.pickle"
-if os.path.exists(datapath):
-    with open(datapath, "rb") as f:
+if os.path.exists(DATAPATH):
+    with open(DATAPATH, "rb") as f:
         dataset = pickle.load(f)
 
+spectrogram = torchaudio.transforms.Spectrogram(n_fft=FFT_SIZE)
+to_db = torchaudio.transforms.AmplitudeToDB()
+
+lock = threading.Lock()
+class ProcessThread(threading.Thread):
+    def __init__(self, class_path) -> None:
+        threading.Thread.__init__(self)
+        self.class_path = class_path
+    
+    def run(self):
+        lock.acquire()
+        id_set = dataset.id_set.copy()
+        lock.release()
+        for file_path in self.class_path.iterdir():
+            if file_path.stem not in id_set:
+                self.process_file(file_path)
+
+    def process_file(self, file_path):
+        waveform, samplerate = torchaudio.load(file_path)
+        spec = spectrogram(waveform)
+        spec_db = to_db(spec)[0]
+        label = CLASSES_MAP_REV[self.class_path.name]
+        id = int(file_path.stem)
+        # return spec_db, label, id
+        lock.acquire()
+        dataset.add_samples(spec_db, label, id)
+        print("added", self.class_path.name, file_path.name)
+        lock.release()
+
+threads = []
 for class_path in SOUNDSDIR.iterdir():
-    for file_path in class_path.iterdir():
-        if file_path.stem not in dataset.id_set:
-            waveform, samplerate = torchaudio.load(file_path)
-            if len(waveform) > 1:
-                new_waveform = torch.zeros(1, waveform.shape[1])
-                for i in range(waveform.shape[1]):
-                    new_waveform[0, i] = torch.mean(waveform[:, i])
-                waveform = new_waveform
+    threads.append(ProcessThread(class_path))
+    threads[-1].start()
 
-            spectrogram = TRANSFORM(waveform)[0]
-            label = CLASSES_MAP_REV[class_path.name]
-            id = int(file_path.stem)
-            dataset.add_samples(spectrogram, label, id)
-            print("added ", class_path.name, file_path.name)
+for thread in threads:
+    thread.join()
 
-with open(datapath, "wb") as f:
+with open(DATAPATH, "wb") as f:
     pickle.dump(dataset, f)
