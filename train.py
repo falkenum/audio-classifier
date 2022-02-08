@@ -14,20 +14,15 @@ class AudioClassifierModule(torch.nn.Module):
 
 model = AudioClassifierModule()
 
-learning_rate = 1e-3
-batch_size = 64
+learning_rate = 1e-4
+batch_size = 32
+epochs = 50
 
-# TODO handle different sampling rates
-
-# pred = model(torch.rand(common.FEATURE_SIZE))
-# sm = torch.nn.Softmax(dim=0)
-# result = sm(pred)
 with open(common.DATAPATH, "rb") as f:
     dataset = pickle.load(f)
 
 data_lengths = (round(len(dataset) * 0.9), round(len(dataset) * 0.1))
 train_data, test_data = random_split(dataset, data_lengths)
-
 train_dataloader = DataLoader(train_data, batch_size=batch_size)
 test_dataloader = DataLoader(test_data, batch_size=batch_size)
 
@@ -66,7 +61,6 @@ def test_loop(dataloader, model, loss_fn):
 loss_fn = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
 
-epochs = 10
 for t in range(epochs):
     print(f"Epoch {t+1}\n-------------------------------")
     train_loop(train_dataloader, model, loss_fn, optimizer)
