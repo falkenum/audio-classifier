@@ -2,16 +2,16 @@ from urllib.error import ContentTooShortError
 import freesound
 import os
 
+from common import CLASSES_LIST
+
 client = freesound.FreesoundClient()
 api_token = os.environ.get("FREESOUND_TOKEN")
 client.set_token(api_token, auth_type="oauth")
 
-# results = client.text_search(query="violin")
-tags = ["bass", "percussion", "guitar", "trumpet", "violin"]
 page = 2
 extension = "wav"
 
-for tag in tags:
+for tag in CLASSES_LIST:
     outdir = f"./sounds/{tag}/"
     if not os.path.exists(outdir):
         os.makedirs(outdir)
