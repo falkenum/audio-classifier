@@ -4,20 +4,13 @@ from torch.utils.data import random_split, DataLoader
 import pickle
 import common
 
-class AudioClassifierModule(torch.nn.Module):
-    def __init__(self, out_features) -> None:
-        super().__init__()
-        self.linear = torch.nn.Linear(common.FEATURE_SIZE, out_features)
-    
-    def forward(self, x):
-        return self.linear(x)
 
 
 
 with open(common.DATAPATH, "rb") as f:
     dataset = pickle.load(f)
-
-model = AudioClassifierModule(dataset.labels.shape[0])
+num_out_features = dataset.labels.shape[0]
+model = common.AudioClassifierModule(num_out_features)
 
 learning_rate = 1e-3
 batch_size = 32
@@ -46,7 +39,7 @@ def train_loop(dataloader, model, loss_fn, optimizer):
 
 
 def test_loop(dataloader, model, loss_fn):
-    size = len(dataloader.dataset)
+    size = len(dataloader.dataset) * num_out_features
     num_batches = len(dataloader)
     test_loss, correct = 0, 0
 
@@ -54,13 +47,13 @@ def test_loop(dataloader, model, loss_fn):
         for X, y in dataloader:
             pred = model(X)
             test_loss += loss_fn(pred, y).item()
-            correct += (pred.argmax(1) == y).type(torch.float).sum().item()
+            correct += (pred.round() == y).sum(dim=[0,1], dtype=torch.float32)
 
     test_loss /= num_batches
     correct /= size
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
 
-loss_fn = torch.nn.NLLLoss()
+loss_fn = torch.nn.L1Loss()
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
 
 for t in range(epochs):
@@ -69,3 +62,5 @@ for t in range(epochs):
     test_loop(test_dataloader, model, loss_fn)
 print("Done!")
 
+with open(common.MODEL_PATH, "wb") as f:
+    pickle.dump(model, f)

@@ -2,12 +2,13 @@ import pickle
 import torch
 import torchaudio
 import os
-from common import TAGSPATH, AudioClassDataset, SOUNDSDIR, FFT_SIZE, DATAPATH
+from common import TAG_BY_FEATURE_PATH, TAGSPATH, AudioClassDataset, SOUNDSDIR, FFT_SIZE, DATAPATH
 dataset = AudioClassDataset()
 with open(TAGSPATH, "rb") as f:
     tags = pickle.load(f)
 
 tag_to_feature = {}
+tag_by_feature = []
 
 for id in tags:
     for tag in tags[id]:
@@ -15,6 +16,11 @@ for id in tags:
 
 for i, tag in enumerate(tag_to_feature.keys()):
     tag_to_feature[tag] = i
+    tag_by_feature.append(tag)
+
+with open(TAG_BY_FEATURE_PATH, "wb") as f:
+    pickle.dump(tag_by_feature, f)
+
 num_out_features = len(tag_to_feature)
 
 if os.path.exists(DATAPATH):

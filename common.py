@@ -6,9 +6,19 @@ import pathlib
 SAMPLERATE = 48000
 DATAPATH = "./data.pickle"
 TAGSPATH = "./tags.pickle"
+TAG_BY_FEATURE_PATH = "./tag_by_feature.pickle"
+MODEL_PATH = "./model.pickle"
 SOUNDSDIR = pathlib.Path("./sounds")
 FFT_SIZE = 1024
 FEATURE_SIZE = FFT_SIZE // 2 + 1
+
+class AudioClassifierModule(torch.nn.Module):
+    def __init__(self, out_features) -> None:
+        super().__init__()
+        self.linear = torch.nn.Linear(FEATURE_SIZE, out_features)
+
+    def forward(self, x):
+        return torch.sigmoid(self.linear(x))
 
 class AudioClassDataset(Dataset):
     def __init__(self):
