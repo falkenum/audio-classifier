@@ -4,11 +4,12 @@ from torch.utils.data import random_split, DataLoader
 import pickle
 import common
 
-
-
+with open(common.TAG_BY_FEATURE_PATH, "rb") as f:
+    tag_by_feature = pickle.load(f)
 
 with open(common.DATAPATH, "rb") as f:
     dataset = pickle.load(f)
+
 num_out_features = dataset.labels.shape[0]
 model = common.AudioClassifierModule(num_out_features)
 
@@ -39,7 +40,8 @@ def train_loop(dataloader, model, loss_fn, optimizer):
 
 
 def test_loop(dataloader, model, loss_fn):
-    size = len(dataloader.dataset) * num_out_features
+    top_count = 3
+    size = len(dataloader.dataset) * top_count
     num_batches = len(dataloader)
     test_loss, correct = 0, 0
 
@@ -47,7 +49,12 @@ def test_loop(dataloader, model, loss_fn):
         for X, y in dataloader:
             pred = model(X)
             test_loss += loss_fn(pred, y).item()
-            correct += (pred.round() == y).sum(dim=[0,1], dtype=torch.float32)
+
+            for row_idx, row in enumerate(pred):
+                idx_with_prob = list(enumerate(row))
+                idx_with_prob.sort(key=lambda elt: elt[1], reverse=True)
+                # pred_with_prob.append(idx_with_prob)
+                correct += [y[row_idx][i] for i, p in idx_with_prob[:top_count]].count(1)
 
     test_loss /= num_batches
     correct /= size
