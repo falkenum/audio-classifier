@@ -53,6 +53,7 @@ def test_loop(dataloader, model, loss_fn):
             for row_idx, row in enumerate(pred):
                 idx_with_prob = list(enumerate(row))
                 idx_with_prob.sort(key=lambda elt: elt[1], reverse=True)
+                # idx_with_prob
                 # pred_with_prob.append(idx_with_prob)
                 correct += [y[row_idx][i] for i, p in idx_with_prob[:top_count]].count(1)
 
