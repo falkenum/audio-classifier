@@ -4,12 +4,14 @@ import os
 import torchaudio
 import torch
 import pickle
+import json
 
 from common import SAMPLERATE
 
 client = freesound.FreesoundClient()
-api_token = os.environ.get("FREESOUND_TOKEN")
-client.set_token(api_token, auth_type="oauth")
+with open("freesound_auth.json") as f:
+    auth_info = json.load(f)
+client.set_token(auth_info["access_token"], auth_type="oauth")
 
 # page_size = 15
 MAX_PAGE=5
