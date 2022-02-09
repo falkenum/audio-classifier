@@ -2,9 +2,10 @@ import pickle
 import torch
 import torchaudio
 import os
-from common import TAG_BY_FEATURE_PATH, TAGSPATH, AudioClassDataset, SOUNDSDIR, FFT_SIZE, DATAPATH
+import pathlib
+from common import AC_ANALYSIS_PATH, TAG_BY_FEATURE_PATH, TAGS_PATH, AudioClassDataset, SOUNDS_DIR, FFT_SIZE, DATA_PATH
 dataset = AudioClassDataset()
-with open(TAGSPATH, "rb") as f:
+with open(TAGS_PATH, "rb") as f:
     tags = pickle.load(f)
 
 tag_to_feature = {}
@@ -21,16 +22,21 @@ for i, tag in enumerate(tag_to_feature.keys()):
 with open(TAG_BY_FEATURE_PATH, "wb") as f:
     pickle.dump(tag_by_feature, f)
 
+with open(AC_ANALYSIS_PATH, "rb") as f:
+    ac_analysis = pickle.load(f)
+
+print(ac_analysis)
+
 num_out_features = len(tag_to_feature)
 
-if os.path.exists(DATAPATH):
-    with open(DATAPATH, "rb") as f:
+if os.path.exists(DATA_PATH):
+    with open(DATA_PATH, "rb") as f:
         dataset = pickle.load(f)
 
 spectrogram = torchaudio.transforms.Spectrogram(n_fft=FFT_SIZE)
 to_db = torchaudio.transforms.AmplitudeToDB()
 
-for filepath in SOUNDSDIR.iterdir():
+for filepath in pathlib.Path(SOUNDS_DIR).iterdir():
     if filepath.stem not in dataset.id_set:
         waveform, samplerate = torchaudio.load(filepath)
         spec = spectrogram(waveform)
@@ -42,5 +48,5 @@ for filepath in SOUNDSDIR.iterdir():
         dataset.add_samples(spec_db, label, id)
         print("added", filepath.name)
 
-with open(DATAPATH, "wb") as f:
+with open(DATA_PATH, "wb") as f:
     pickle.dump(dataset, f)

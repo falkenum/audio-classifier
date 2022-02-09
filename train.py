@@ -7,7 +7,7 @@ import common
 with open(common.TAG_BY_FEATURE_PATH, "rb") as f:
     tag_by_feature = pickle.load(f)
 
-with open(common.DATAPATH, "rb") as f:
+with open(common.DATA_PATH, "rb") as f:
     dataset = pickle.load(f)
 
 num_out_features = dataset.labels.shape[0]

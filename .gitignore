@@ -1,7 +1,6 @@
-.vscode/
-__pycache__/
-sounds/**
+.vscode
+__pycache__
 sounds
-*.pickle
+pickle
 freesound_reauth.sh
 freesound_auth.json

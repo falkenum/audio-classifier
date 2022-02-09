@@ -1,16 +1,26 @@
 from torch.utils.data import Dataset
 import torch
 import torchaudio
-import pathlib
+import os
 
-SAMPLERATE = 48000
-DATAPATH = "./data.pickle"
-TAGSPATH = "./tags.pickle"
-TAG_BY_FEATURE_PATH = "./tag_by_feature.pickle"
-MODEL_PATH = "./model.pickle"
-SOUNDSDIR = pathlib.Path("./sounds")
+SAMPLE_RATE = 48000
+PICKLE_DIR = "./pickle/"
+SOUNDS_DIR = "./sounds/"
+
+DATA_PATH = f"{PICKLE_DIR}data.pickle"
+TAGS_PATH = f"{PICKLE_DIR}tags.pickle"
+TAG_BY_FEATURE_PATH = f"{PICKLE_DIR}tag_by_feature.pickle"
+MODEL_PATH = f"{PICKLE_DIR}model.pickle"
+AC_ANALYSIS_PATH = f"{PICKLE_DIR}ac_analysis.pickle"
+
 FFT_SIZE = 1024
 FEATURE_SIZE = FFT_SIZE // 2 + 1
+
+if not os.path.exists(PICKLE_DIR):
+    os.makedirs(PICKLE_DIR)
+
+if not os.path.exists(SOUNDS_DIR):
+    os.makedirs(SOUNDS_DIR)
 
 class AudioClassifierModule(torch.nn.Module):
     def __init__(self, out_features) -> None:

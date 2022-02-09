@@ -2,12 +2,12 @@ import enum
 import torch
 import pickle
 from torch.utils.data import DataLoader
-from common import MODEL_PATH, DATAPATH, TAG_BY_FEATURE_PATH, AudioClassifierModule
+from common import MODEL_PATH, DATA_PATH, TAG_BY_FEATURE_PATH, AudioClassifierModule
 
 with open(MODEL_PATH, "rb") as f:
     model = pickle.load(f)
 
-with open(DATAPATH, "rb") as f:
+with open(DATA_PATH, "rb") as f:
     dataset = pickle.load(f)
 
 with open(TAG_BY_FEATURE_PATH, "rb") as f:
