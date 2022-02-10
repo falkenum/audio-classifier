@@ -26,10 +26,9 @@ class AudioClassifierModule(torch.nn.Module):
     def __init__(self, out_features) -> None:
         super().__init__()
         self.linear = torch.nn.Linear(FEATURE_SIZE, out_features)
-        self.relu = torch.nn.ReLU()
 
     def forward(self, x):
-        return self.relu(self.linear(x))
+        return self.linear(x)
 
 class AudioClassDataset(Dataset):
     def __init__(self):
