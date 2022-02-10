@@ -66,6 +66,7 @@ for id in ac_analysis:
         ac_features.append(ac_analysis[id]["ac_log_attack_time"])
         ac_features.append(ac_analysis[id]["ac_boominess"])
     except KeyError:
+        print(f"ac features missing, skipping {id}")
         continue
     ac_features = torch.Tensor([ac_features]).T
 
