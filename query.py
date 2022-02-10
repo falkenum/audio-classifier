@@ -14,7 +14,7 @@ with open("freesound_auth.json") as f:
 client.set_token(auth_info["access_token"], auth_type="oauth")
 
 # page_size = 15
-MAX_PAGE=5
+MAX_PAGE=500
 extension = "wav"
 tags={}
 ac_analysis={}

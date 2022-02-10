@@ -25,8 +25,6 @@ with open(TAG_BY_FEATURE_PATH, "wb") as f:
 with open(AC_ANALYSIS_PATH, "rb") as f:
     ac_analysis = pickle.load(f)
 
-print(ac_analysis)
-
 num_out_features = len(tag_to_feature)
 
 if os.path.exists(DATA_PATH):
