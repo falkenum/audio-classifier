@@ -14,7 +14,7 @@ MODEL_PATH = f"{PICKLE_DIR}model.pickle"
 AC_ANALYSIS_PATH = f"{PICKLE_DIR}ac_analysis.pickle"
 
 FFT_SIZE = 1024
-FEATURE_SIZE = FFT_SIZE // 2 + 1
+FEATURE_SIZE = 8
 
 if not os.path.exists(PICKLE_DIR):
     os.makedirs(PICKLE_DIR)

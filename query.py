@@ -14,7 +14,7 @@ with open("freesound_auth.json") as f:
 client.set_token(auth_info["access_token"], auth_type="oauth")
 
 # page_size = 15
-MAX_PAGE=5
+MAX_PAGE=50
 extension = "wav"
 tags={}
 ac_analysis={}
@@ -43,8 +43,11 @@ for page in range(1, MAX_PAGE+1):
             
         #     torchaudio.save(filepath, waveform, SAMPLERATE)
 
+        if sound.json_dict.get("ac_analysis") is None:
+            continue
+
         tags[int(sound.id)] = sound.tags
-        ac_analysis[int(sound.id)] = sound.json_dict["ac_analysis"]
+        ac_analysis[int(sound.id)] = sound.json_dict.get("ac_analysis")
 
         print(f"{sound.id}: {sound.name}")
 

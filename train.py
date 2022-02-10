@@ -14,7 +14,7 @@ num_out_features = dataset.labels.shape[0]
 model = common.AudioClassifierModule(num_out_features)
 
 learning_rate = 1e-3
-batch_size = 32
+batch_size = 1
 epochs = 20
 
 data_lengths = (floor(len(dataset) * 0.9), ceil(len(dataset) * 0.1))
