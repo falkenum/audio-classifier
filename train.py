@@ -14,7 +14,7 @@ num_out_features = dataset.labels.shape[0]
 model = common.AudioClassifierModule(num_out_features)
 
 learning_rate = 1e-3
-batch_size = 1
+batch_size = 10
 epochs = 20
 
 data_lengths = (floor(len(dataset) * 0.9), ceil(len(dataset) * 0.1))
@@ -40,8 +40,8 @@ def train_loop(dataloader, model, loss_fn, optimizer):
 
 
 def test_loop(dataloader, model, loss_fn):
-    top_count = 3
-    size = len(dataloader.dataset) * top_count
+    # top_count = 3
+    size = len(dataloader.dataset)
     num_batches = len(dataloader)
     test_loss, correct = 0, 0
 
@@ -51,17 +51,21 @@ def test_loop(dataloader, model, loss_fn):
             test_loss += loss_fn(pred, y).item()
 
             for row_idx, row in enumerate(pred):
-                idx_with_prob = list(enumerate(row))
-                idx_with_prob.sort(key=lambda elt: elt[1], reverse=True)
+                pmax_idx = row.argmax()
+                # pmax = row[pmax_idx]
+                # for p_idx, p in enumerate(row):
+                #     if p > pmax:
+                #         pmax_idx = p_idx
+                # idx_with_prob.sort(key=lambda elt: elt[1], reverse=True)
                 # idx_with_prob
                 # pred_with_prob.append(idx_with_prob)
-                correct += [y[row_idx][i] for i, p in idx_with_prob[:top_count]].count(1)
+                correct += y[row_idx][pmax_idx]
 
     test_loss /= num_batches
     correct /= size
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
 
-loss_fn = torch.nn.L1Loss()
+loss_fn = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
 
 for t in range(epochs):

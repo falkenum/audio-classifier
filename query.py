@@ -43,9 +43,6 @@ for page in range(1, MAX_PAGE+1):
             
         #     torchaudio.save(filepath, waveform, SAMPLERATE)
 
-        if sound.json_dict.get("ac_analysis") is None:
-            continue
-
         tags[int(sound.id)] = sound.tags
         ac_analysis[int(sound.id)] = sound.json_dict.get("ac_analysis")
 

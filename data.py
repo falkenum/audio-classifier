@@ -56,6 +56,9 @@ for id in ac_analysis:
     # spec_db = to_db(spec)[0]
 
     ac_features = []
+    if ac_analysis[id] is None:
+        print(f"ac data missing, skipping {id}")
+        continue
     try:
         ac_features.append(ac_analysis[id]["ac_depth"])
         ac_features.append(ac_analysis[id]["ac_temporal_centroid"])
