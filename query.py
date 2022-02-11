@@ -13,13 +13,13 @@ with open(FREESOUND_AUTH_PATH) as f:
     auth_info = json.load(f)
 client.set_token(auth_info["access_token"], auth_type="oauth")
 
-# page_size = 15
-MAX_PAGE=5000
+page_size = 150
+MAX_PAGE=500
 extension = "wav"
 tags={}
 ac_analysis={}
 for page in range(1, MAX_PAGE+1):
-    results = client.text_search(query="", filter=f"duration:[0 TO 30] type:{extension}", page=page, fields="id,name,tags,ac_analysis", sort="downloads_desc")
+    results = client.text_search(query="", filter=f"duration:[0 TO 30] type:{extension}", page=page, page_size=page_size, fields="id,name,tags,ac_analysis", sort="downloads_desc")
 
     for sound in results:
         filename = f"{sound.id}.{extension}"
