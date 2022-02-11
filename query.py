@@ -6,10 +6,10 @@ import torch
 import pickle
 import json
 
-from common import AC_ANALYSIS_PATH, SAMPLE_RATE, SOUNDS_DIR, TAGS_PATH, PREFIX_DIR
+from common import AC_ANALYSIS_PATH, FREESOUND_AUTH_PATH, SAMPLE_RATE, SOUNDS_DIR, TAGS_PATH, PREFIX_DIR
 
 client = freesound.FreesoundClient()
-with open(f"{PREFIX_DIR}/freesound_auth.json") as f:
+with open(FREESOUND_AUTH_PATH) as f:
     auth_info = json.load(f)
 client.set_token(auth_info["access_token"], auth_type="oauth")
 

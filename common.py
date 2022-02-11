@@ -8,6 +8,7 @@ PREFIX_DIR = os.path.dirname(__file__)
 PICKLE_DIR = f"{PREFIX_DIR}/pickle/"
 SOUNDS_DIR = f"{PREFIX_DIR}/sounds/"
 
+FREESOUND_AUTH_PATH = f"{PREFIX_DIR}/freesound_auth.json"
 DATA_PATH = f"{PICKLE_DIR}data.pickle"
 TAGS_PATH = f"{PICKLE_DIR}tags.pickle"
 TAG_BY_FEATURE_PATH = f"{PICKLE_DIR}tag_by_feature.pickle"
