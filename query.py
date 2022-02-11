@@ -6,15 +6,15 @@ import torch
 import pickle
 import json
 
-from common import AC_ANALYSIS_PATH, SAMPLE_RATE, SOUNDS_DIR, TAGS_PATH
+from common import AC_ANALYSIS_PATH, SAMPLE_RATE, SOUNDS_DIR, TAGS_PATH, PREFIX_DIR
 
 client = freesound.FreesoundClient()
-with open("freesound_auth.json") as f:
+with open(f"{PREFIX_DIR}/freesound_auth.json") as f:
     auth_info = json.load(f)
 client.set_token(auth_info["access_token"], auth_type="oauth")
 
 # page_size = 15
-MAX_PAGE=500
+MAX_PAGE=5000
 extension = "wav"
 tags={}
 ac_analysis={}

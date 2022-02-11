@@ -4,8 +4,9 @@ import torchaudio
 import os
 
 SAMPLE_RATE = 48000
-PICKLE_DIR = "./pickle/"
-SOUNDS_DIR = "./sounds/"
+PREFIX_DIR = os.path.dirname(__file__)
+PICKLE_DIR = f"{PREFIX_DIR}/pickle/"
+SOUNDS_DIR = f"{PREFIX_DIR}/sounds/"
 
 DATA_PATH = f"{PICKLE_DIR}data.pickle"
 TAGS_PATH = f"{PICKLE_DIR}tags.pickle"
