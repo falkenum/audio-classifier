@@ -2,20 +2,19 @@ from math import ceil, floor
 import torch
 from torch.utils.data import random_split, DataLoader
 import pickle
-import common
+from common import *
+from db import Database
 
-with open(common.TAG_BY_FEATURE_PATH, "rb") as f:
-    tag_by_feature = pickle.load(f)
-
-with open(common.DATA_PATH, "rb") as f:
+with open(DATA_PATH, "rb") as f:
     dataset = pickle.load(f)
 
+num_in_features = dataset.data.shape[0]
 num_out_features = dataset.labels.shape[0]
-model = common.AudioClassifierModule(num_out_features)
+model = AudioClassifierModule(num_in_features, num_out_features)
 
 learning_rate = 1e-3
-batch_size = 10
-epochs = 20
+batch_size = 30
+epochs = 10
 
 data_lengths = (floor(len(dataset) * 0.9), ceil(len(dataset) * 0.1))
 train_data, test_data = random_split(dataset, data_lengths)
@@ -74,5 +73,5 @@ for t in range(epochs):
     test_loop(test_dataloader, model, loss_fn)
 print("Done!")
 
-with open(common.MODEL_PATH, "wb") as f:
+with open(MODEL_PATH, "wb") as f:
     pickle.dump(model, f)

@@ -10,24 +10,23 @@ SOUNDS_DIR = f"{PREFIX_DIR}/sounds/"
 
 FREESOUND_AUTH_PATH = f"{PREFIX_DIR}/freesound_auth.json"
 DATA_PATH = f"{PICKLE_DIR}data.pickle"
-TAGS_PATH = f"{PICKLE_DIR}tags.pickle"
-TAG_BY_FEATURE_PATH = f"{PICKLE_DIR}tag_by_feature.pickle"
+# TAGS_PATH = f"{PICKLE_DIR}tags.pickle"
+# TAG_BY_FEATURE_PATH = f"{PICKLE_DIR}tag_by_feature.pickle"
 MODEL_PATH = f"{PICKLE_DIR}model.pickle"
-AC_ANALYSIS_PATH = f"{PICKLE_DIR}ac_analysis.pickle"
+# AC_ANALYSIS_PATH = f"{PICKLE_DIR}ac_analysis.pickle"
 
 FFT_SIZE = 1024
-FEATURE_SIZE = 8
 
 if not os.path.exists(PICKLE_DIR):
     os.makedirs(PICKLE_DIR)
 
-if not os.path.exists(SOUNDS_DIR):
-    os.makedirs(SOUNDS_DIR)
+# if not os.path.exists(SOUNDS_DIR):
+#     os.makedirs(SOUNDS_DIR)
 
 class AudioClassifierModule(torch.nn.Module):
-    def __init__(self, out_features) -> None:
+    def __init__(self, in_features, out_features) -> None:
         super().__init__()
-        self.linear = torch.nn.Linear(FEATURE_SIZE, out_features)
+        self.linear = torch.nn.Linear(in_features, out_features)
 
     def forward(self, x):
         return self.linear(x)
@@ -35,7 +34,7 @@ class AudioClassifierModule(torch.nn.Module):
 class AudioClassDataset(Dataset):
     def __init__(self):
         super().__init__()
-        self.data = torch.Tensor(FEATURE_SIZE, 0)
+        self.data = None
         self.labels = None
         self.id_set = set()
     
@@ -46,9 +45,13 @@ class AudioClassDataset(Dataset):
         return self.data.shape[1]
     
     def add_samples(self, data, label, id):
-        self.data = torch.cat((self.data, data), 1)
 
         for i in range(data.shape[1]):
+            if self.data is not None:
+                self.data = torch.cat((self.data, data), 1)
+            else:
+                self.data = data
+
             if self.labels is not None:
                 self.labels = torch.cat((self.labels, label), 1)
             else:

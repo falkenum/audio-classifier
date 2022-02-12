@@ -18,14 +18,28 @@ class Database:
     
     def insert_sounds(self, sounds):
         cur = self.conn.cursor()
-        values = ",".join([cur.mogrify("(%s, %s, %s)", (sound.id, sound.name, sound.tags)).decode("utf-8") for sound in sounds])
-        # print(values)
-        query = f'INSERT INTO "sounds" (id, name, tags) VALUES {values} ON CONFLICT (id) DO NOTHING'
-        # query = "SELECT table_name from information_schema.tables where table_schema = 'public'"
+        values = []
+        for sound in sounds:
+            id = sound.id
+            tags = sound.tags
+            se_mean = float(sound.analysis.json_dict["lowlevel"]["spectral_energy"]["mean"])
+            se_max = float(sound.analysis.json_dict["lowlevel"]["spectral_energy"]["max"])
+            se_min = float(sound.analysis.json_dict["lowlevel"]["spectral_energy"]["min"])
+            value = cur.mogrify("(%s, %s, %s, %s, %s)", (id, tags, se_mean, se_max, se_min)).decode("utf-8")
+            values.append(value)
+        values_str = ",".join(values)
+        query = f'INSERT INTO "sounds" (id, tags, se_mean, se_max, se_min) VALUES {values_str} ON CONFLICT (id) DO NOTHING'
         cur.execute(query)
-        # print(cur.fetchall())
 
         self.conn.commit()
+    
+    def get_sounds(self):
+        cur = self.conn.cursor()
+        cur.execute("select * from sounds")
+
+        return cur.fetchall()
+
+
 
 # db = Database()
 # db.insert_sounds([])
