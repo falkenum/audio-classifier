@@ -40,22 +40,17 @@ for idx, (sound_id, sound_tags) in enumerate(query_result):
     # if sound_id not in dataset.id_set:
     # print(idx, sound_id, psutil.virtual_memory()[1] / 2**30, "GB")
     print(idx, sound_id)
-    print("loading wav")
     raw_sound, fs = load_wav(sound_id)
 
-    print("resampling")
     resampler = torchaudio.transforms.Resample(fs, SAMPLE_RATE)
     # only using first channel for now
     resampled_sound = resampler(raw_sound[0])
-    print("spectrogram")
     spec = spectrogram(resampled_sound)
 
     label = torch.zeros(NUM_FEATURE_LABELS, dtype=int)
-    print("gen labels")
     for sound_tag in sound_tags:
         if tag_to_feature.get(sound_tag) is not None:
             label[tag_to_feature[sound_tag]] = 1
 
-    print("populate db")
     for col in range(spec.shape[1]):
         db.insert_sample(int(sound_id), col, spec[:, col].tolist(), label.tolist())

@@ -35,34 +35,13 @@ class AudioClassifierModule(torch.nn.Module):
         super().__init__()
         # self.layers = torch.nn.Linear(in_features, out_features)
         self.layers = torch.nn.Sequential(
-            torch.nn.Linear(in_features, in_features, device="cuda:0"),
-            torch.nn.AvgPool1d(10, 10),
-            torch.nn.Linear(in_features//10, out_features, device="cuda:0"),
+            torch.nn.Linear(in_features, out_features, device="cuda:0"),
+            # torch.nn.AvgPool1d(10, 10),
+            # torch.nn.Linear(in_features//10, out_features, device="cuda:0"),
         )
 
     def forward(self, x):
-        return torch.sigmoid(self.layers(x))
-
-# class AudioClassDataset(Dataset):
-#     def __init__(self):
-#         super().__init__()
-#         self.data = []
-#         self.labels = []
-#         self.id_set = set()
-    
-#     def __getitem__(self, index):
-#         if torch.cuda.is_available():
-#             return self.data[index].to("cuda:0"), self.labels[index].to("cuda:0")
-#         else:
-#             return self.data[index], self.labels[index]
-
-#     def __len__(self):
-#         return len(self.data)
-    
-#     def add_sample(self, data, label, id):
-#         self.data.append(data)
-#         self.labels.append(label)
-#         self.id_set.add(id)
+        return self.layers(x)
 
 class SamplesIterator:
     def __init__(self, num_sounds, shuffle) -> None:
@@ -106,7 +85,7 @@ class SamplesDataset(IterableDataset):
         self.it = SamplesIterator(self.num_sounds, self.shuffle)
         return self.it
     
-    def __len__(self):
-        return self.db.get_num_samples()
+    # def __len__(self):
+    #     return self.db.get_num_samples()
     
 
