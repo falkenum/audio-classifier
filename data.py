@@ -1,10 +1,10 @@
 from common import *
-from db import Database
+from db import AudioDatabase
 import pickle
 
 dataset = AudioClassDataset()
 
-db = Database()
+db = AudioDatabase()
 sounds = db.get_sounds()
 
 tag_to_feature = {}

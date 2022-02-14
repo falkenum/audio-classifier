@@ -3,7 +3,7 @@ import torch
 from torch.utils.data import random_split, DataLoader
 import pickle
 from common import *
-from db import Database
+from db import AudioDatabase
 
 with open(DATA_PATH, "rb") as f:
     dataset = pickle.load(f)

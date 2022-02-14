@@ -7,6 +7,7 @@ SAMPLE_RATE = 48000
 PREFIX_DIR = os.path.dirname(__file__)
 PICKLE_DIR = f"{PREFIX_DIR}/pickle/"
 SOUNDS_DIR = f"{PREFIX_DIR}/sounds/"
+FEATURE_TAGS = ["guitar", "piano", "violin", "trumpet"]
 
 FREESOUND_AUTH_PATH = f"{PREFIX_DIR}/freesound_auth.json"
 DATA_PATH = f"{PICKLE_DIR}data.pickle"
@@ -20,8 +21,8 @@ FFT_SIZE = 1024
 if not os.path.exists(PICKLE_DIR):
     os.makedirs(PICKLE_DIR)
 
-# if not os.path.exists(SOUNDS_DIR):
-#     os.makedirs(SOUNDS_DIR)
+if not os.path.exists(SOUNDS_DIR):
+    os.makedirs(SOUNDS_DIR)
 
 class AudioClassifierModule(torch.nn.Module):
     def __init__(self, in_features, out_features) -> None:
