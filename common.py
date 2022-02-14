@@ -1,6 +1,7 @@
 from torch.utils.data import Dataset
 from collections import deque
 import torch
+from torch import nn
 from torch.utils.data import IterableDataset
 import torchaudio
 import os
@@ -31,61 +32,89 @@ def load_wav(id):
     return torchaudio.load(f"{SOUNDS_DIR}/{id}.wav")
 
 class AudioClassifierModule(torch.nn.Module):
-    def __init__(self, in_features, out_features) -> None:
+    def __init__(self, n_input, n_output) -> None:
         super().__init__()
+        n_channel = 1
+        stride = 32
         # self.layers = torch.nn.Linear(in_features, out_features)
         self.layers = torch.nn.Sequential(
-            torch.nn.Linear(in_features, out_features, device="cuda:0"),
-            # torch.nn.AvgPool1d(10, 10),
-            # torch.nn.Linear(in_features//10, out_features, device="cuda:0"),
+            nn.Conv1d(n_input, n_channel, kernel_size=80, stride=stride),
+            nn.BatchNorm1d(n_channel),
+            nn.MaxPool1d(4),
+            nn.Conv1d(n_channel, n_channel, kernel_size=3),
+            nn.BatchNorm1d(n_channel),
+            nn.MaxPool1d(4),
+            nn.Linear(n_channel, n_output),
         )
 
     def forward(self, x):
         return self.layers(x)
 
-class SamplesIterator:
-    def __init__(self, num_sounds, shuffle) -> None:
-        self.samples_queue = deque()
-        self.source_id_queue = deque()
-        self.db = AudioDatabase()
-        sound_ids = self.db.get_sound_ids_from_samples(num_sounds, shuffle)
-        self.source_id_queue.extend(sound_ids)
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        if len(self.samples_queue) == 0:
-            while True:
-                if len(self.source_id_queue) == 0:
-                    raise StopIteration
-                source_id = self.source_id_queue.pop()
-                self.samples_queue.extend(self.db.get_samples_for_id(source_id))
-
-                if len(self.samples_queue) != 0:
-                    break
-
-        
-        x, y = self.samples_queue.pop()
-        if torch.cuda.is_available():
-            return torch.tensor(x, device="cuda:0", dtype=torch.float32), torch.tensor(y, device="cuda:0", dtype=torch.float32)
-        else:
-            return torch.tensor(x, dtype=torch.float32), torch.tensor(y, dtype=torch.float32)
-
-
 class SamplesDataset(IterableDataset):
-    def __init__(self, num_sounds, shuffle = False) -> None:
+    def __init__(self, num_sounds, shuffle = False, chunk_size = 1000) -> None:
         super().__init__()
         self.num_sounds = num_sounds
         self.shuffle = shuffle
-        self.it = None
+        self.chunk_size = chunk_size
         self.db = AudioDatabase()
+        self.data_queue = None
+        self.next_label = None
+        self.sound_queue = None
+
+    def _reinit(self):
+        self.data_queue = deque()
+        self.sound_queue = deque()
+
+        query_result = list(self.db.get_sounds(limit=self.num_sounds))
+        tag_counts = {}
+        for sound_id, sound_tags in query_result:
+            for sound_tag in sound_tags:
+                if sound_tag not in tag_counts.keys():
+                    tag_counts[sound_tag] = 0
+                tag_counts[sound_tag] += 1
+
+        tag_counts = [(k, v) for k, v in tag_counts.items()]
+        def sort_key(elt):
+            k, v = elt
+            return v
+        tag_counts.sort(key=sort_key, reverse=True)
+        tags = map(lambda elt: elt[0], tag_counts[:NUM_FEATURE_LABELS])
+        tag_to_feature = {tag: idx for idx, tag in enumerate(tags)}
+
+        for sound_id, sound_tags in query_result:
+            label = torch.zeros(NUM_FEATURE_LABELS)
+            for sound_tag in sound_tags:
+                if tag_to_feature.get(sound_tag) is not None:
+                    label[tag_to_feature[sound_tag]] = 1
+            self.sound_queue.append((sound_id, label))
 
     def __iter__(self):
-        self.it = SamplesIterator(self.num_sounds, self.shuffle)
-        return self.it
+        self._reinit()
+        return self
+
+    def __next__(self):
+        if len(self.data_queue) == 0:
+            if len(self.sound_queue) == 0:
+                raise StopIteration
+            sound_id, label = self.sound_queue.pop()
+            self.next_label = label
+            raw_sound, fs = load_wav(sound_id)
+            resampler = torchaudio.transforms.Resample(fs, SAMPLE_RATE)
+
+            # only first channel for now
+            resampled_sound = resampler(raw_sound)[0:1]
+            offset = 0
+            while offset + self.chunk_size < resampled_sound.shape[1]:
+                new_chunk = resampled_sound[:, offset:offset+self.chunk_size]
+                if new_chunk.shape[1] != self.chunk_size:
+                    break
+                self.data_queue.append(new_chunk)
+                offset += self.chunk_size
+
+        data = self.data_queue.pop()
+        return data.cuda(0), self.next_label[None, :].cuda(0)
     
-    # def __len__(self):
-    #     return self.db.get_num_samples()
+    def __len__(self):
+        return len(self.id_queue)
     
 

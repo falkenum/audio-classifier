@@ -30,17 +30,21 @@ class AudioDatabase:
 
         self.conn.commit()
     
-    def get_sounds(self, limit):
-        query = f"SELECT * FROM sounds ORDER BY id ASC LIMIT {limit}"
+    def get_sounds(self, limit, shuffle=False):
+        if shuffle:
+            query = f"SELECT * FROM sounds ORDER BY RANDOM () LIMIT {limit}"
+        else:
+            query = f"SELECT * FROM sounds ORDER BY id ASC LIMIT {limit}"
         return pd.read_sql(query, self.conn).to_records(index=False)
 
-    def get_sound_ids_from_samples(self, limit, shuffle):
-        if shuffle:
-            query = f"SELECT * FROM (SELECT DISTINCT source_id FROM samples LIMIT {limit}) AS ids ORDER BY RANDOM ()"
-        else:
-            query = f"SELECT DISTINCT source_id FROM samples ORDER BY source_id ASC LIMIT {limit}"
 
-        return map(lambda elt: elt[0], pd.read_sql(query, self.conn).to_records(index=False))
+    def get_sound_ids(self, limit, shuffle):
+        if shuffle:
+            query = f"SELECT id FROM sounds ORDER BY RANDOM () LIMIT {limit}"
+        else:
+            query = f"SELECT id FROM sounds ORDER BY id ASC LIMIT {limit}"
+
+        return list(map(lambda elt: elt[0], pd.read_sql(query, self.conn).to_records(index=False)))
 
     def get_num_samples(self):
         query = "SELECT COUNT(source_id) FROM samples"

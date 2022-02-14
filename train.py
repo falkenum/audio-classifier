@@ -11,12 +11,12 @@ train_sounds, test_sounds = (floor(num_sounds * 0.9), ceil(num_sounds * 0.1))
 train_data = SamplesDataset(train_sounds, shuffle=True)
 test_data = SamplesDataset(test_sounds, shuffle=True)
 
-model = AudioClassifierModule(NUM_FEATURE_DATA, NUM_FEATURE_LABELS)
+model = AudioClassifierModule(1, NUM_FEATURE_LABELS).cuda(0)
 db = AudioDatabase()
 
 learning_rate = 1e-3
-batch_size = 30
-epochs = 10
+batch_size = 20
+epochs = 100
 
 train_dataloader = DataLoader(train_data, batch_size=batch_size, drop_last=True)
 test_dataloader = DataLoader(test_data, batch_size=batch_size, drop_last=True)
@@ -47,12 +47,10 @@ def test_loop(dataloader, model, loss_fn):
         for X, y in dataloader:
             pred = model(X)
             test_loss += loss_fn(pred, y).item()
-            for idx, pred_row in enumerate(pred):
-                pred_row_int = pred_row.round().int()
-                y_row_int = y.round().int()[idx]
-                correct += 1 if torch.all(pred_row_int.eq(y_row_int)) else 0
-                if correct == 1:
-                    print("correct")
+            for row_idx, pred_row in enumerate(pred):
+                pred_row = pred_row.round().int()
+                correct += 1 if torch.all(y[row_idx].int().eq(pred_row)) else 0
+
             size += len(X)
             num_batches += 1
 
