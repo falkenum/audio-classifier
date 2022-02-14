@@ -21,8 +21,6 @@ DATA_PATH = f"{PICKLE_DIR}data.pickle"
 MODEL_PATH = f"{PICKLE_DIR}model.pickle"
 # AC_ANALYSIS_PATH = f"{PICKLE_DIR}ac_analysis.pickle"
 
-FFT_SIZE = 1024
-
 if not os.path.exists(PICKLE_DIR):
     os.makedirs(PICKLE_DIR)
 
@@ -37,9 +35,9 @@ class AudioClassifierModule(torch.nn.Module):
         super().__init__()
         # self.layers = torch.nn.Linear(in_features, out_features)
         self.layers = torch.nn.Sequential(
-            torch.nn.Linear(in_features, in_features),
+            torch.nn.Linear(in_features, in_features, device="cuda:0"),
             torch.nn.AvgPool1d(10, 10),
-            torch.nn.Linear(in_features//10, out_features),
+            torch.nn.Linear(in_features//10, out_features, device="cuda:0"),
         )
 
     def forward(self, x):
@@ -71,7 +69,7 @@ class SamplesIterator:
         self.samples_queue = deque()
         self.source_id_queue = deque()
         self.db = AudioDatabase()
-        sound_ids = map(lambda elt: elt[1], self.db.get_sound_ids(num_sounds, shuffle).to_records())
+        sound_ids = self.db.get_sound_ids_from_samples(num_sounds, shuffle)
         self.source_id_queue.extend(sound_ids)
 
     def __iter__(self):
@@ -79,15 +77,22 @@ class SamplesIterator:
 
     def __next__(self):
         if len(self.samples_queue) == 0:
-            if len(self.source_id_queue) == 0:
-                raise StopIteration
-            source_id = self.source_id_queue.pop()
+            while True:
+                if len(self.source_id_queue) == 0:
+                    raise StopIteration
+                source_id = self.source_id_queue.pop()
+                self.samples_queue.extend(self.db.get_samples_for_id(source_id))
 
-            self.samples_queue.extend(self.db.get_samples_for_id(source_id).to_records())
+                if len(self.samples_queue) != 0:
+                    break
+
         
-        # TODO convert to tensor
         x, y = self.samples_queue.pop()
-        return torch.Tensor(x), torch.Tensor(y)
+        if torch.cuda.is_available():
+            return torch.tensor(x, device="cuda:0", dtype=torch.float32), torch.tensor(y, device="cuda:0", dtype=torch.float32)
+        else:
+            return torch.tensor(x, dtype=torch.float32), torch.tensor(y, dtype=torch.float32)
+
 
 class SamplesDataset(IterableDataset):
     def __init__(self, num_sounds, shuffle = False) -> None:

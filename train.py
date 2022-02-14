@@ -1,4 +1,5 @@
 from math import ceil, floor
+from numpy import count_nonzero
 import torch
 from torch.utils.data import random_split, DataLoader, SequentialSampler
 import pickle
@@ -17,8 +18,8 @@ learning_rate = 1e-3
 batch_size = 30
 epochs = 10
 
-train_dataloader = DataLoader(train_data, batch_size=batch_size)
-test_dataloader = DataLoader(test_data, batch_size=batch_size)
+train_dataloader = DataLoader(train_data, batch_size=batch_size, drop_last=True)
+test_dataloader = DataLoader(test_data, batch_size=batch_size, drop_last=True)
 
 def train_loop(dataloader, model, loss_fn, optimizer):
     size = len(dataloader.dataset)
@@ -46,14 +47,16 @@ def test_loop(dataloader, model, loss_fn):
         for X, y in dataloader:
             pred = model(X)
             test_loss += loss_fn(pred, y).item()
-            for row in pred:
-                correct += y == row
+            for idx, pred_row in enumerate(pred):
+                pred_row_int = pred_row.round().int()
+                y_row_int = y.round().int()[idx]
+                correct += 1 if torch.all(pred_row_int.eq(y_row_int)) else 0
 
     test_loss /= num_batches
     correct /= size
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
 
-loss_fn = torch.nn.L1Loss()
+loss_fn = torch.nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 for t in range(epochs):
