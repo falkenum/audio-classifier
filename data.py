@@ -14,7 +14,7 @@ import os
 
 db = AudioDatabase()
 num_files_per_tag = 10
-spectrogram = torchaudio.transforms.Spectrogram()
+spectrogram = torchaudio.transforms.Spectrogram(n_fft=FFT_SIZE)
 
 query_result = list(db.get_sounds(limit=50).to_records())
 tag_counts = {}
@@ -29,8 +29,7 @@ def sort_key(elt):
     k, v = elt
     return v
 tag_counts.sort(key=sort_key, reverse=True)
-num_feature_tags = 10
-tags = map(lambda elt: elt[0], tag_counts[:num_feature_tags])
+tags = map(lambda elt: elt[0], tag_counts[:NUM_FEATURE_LABELS])
 
 tag_to_feature = {tag: idx for idx, tag in enumerate(tags)}
 
@@ -44,7 +43,7 @@ for row, sound_id, sound_tags in query_result:
     resampled_sound = resampler(raw_sound[0])
     spec = spectrogram(resampled_sound)
 
-    label = torch.zeros(num_feature_tags, dtype=int)
+    label = torch.zeros(NUM_FEATURE_LABELS, dtype=int)
     for sound_tag in sound_tags:
         if tag_to_feature.get(sound_tag) is not None:
             label[tag_to_feature[sound_tag]] = 1

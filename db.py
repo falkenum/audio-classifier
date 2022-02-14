@@ -33,13 +33,27 @@ class AudioDatabase:
     def get_sounds(self, limit):
         query = f"SELECT * FROM sounds ORDER BY id ASC LIMIT {limit}"
         return pd.read_sql(query, self.conn)
-    
+
+    def get_sound_ids(self, limit, shuffle):
+        if shuffle:
+            query = f"SELECT id FROM sounds ORDER BY RANDOM () LIMIT {limit}"
+        else:
+            query = f"SELECT id FROM sounds ORDER BY id ASC LIMIT {limit}"
+
+        return pd.read_sql(query, self.conn)
+
+    def get_num_samples(self):
+        query = "SELECT COUNT(source_id) FROM samples"
+        return pd.read_sql(query, self.conn).to_records()[0][1]
+
     def insert_sample(self, source_id, spec_idx, data, label):
         cur = self.conn.cursor()
         cur.execute("INSERT INTO samples (source_id, spec_idx, data, label) VALUES (%s, %s, %s, %s) ON CONFLICT (source_id, spec_idx) DO NOTHING", (source_id, spec_idx, data, label))
 
         self.conn.commit()
-
+    
+    def get_samples_for_id(self, source_id):
+        return pd.read_sql(f"SELECT data, label FROM samples WHERE source_id={source_id} ORDER BY spec_idx ASC", self.conn)
 
 
 # db = Database()

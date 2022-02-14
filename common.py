@@ -1,12 +1,18 @@
 from torch.utils.data import Dataset
+from collections import deque
 import torch
+from torch.utils.data import IterableDataset
 import torchaudio
 import os
+from db import AudioDatabase
 
 SAMPLE_RATE = 44100
 PREFIX_DIR = os.path.dirname(__file__)
 PICKLE_DIR = f"{PREFIX_DIR}/pickle/"
 SOUNDS_DIR = f"{PREFIX_DIR}/sounds/"
+NUM_FEATURE_LABELS = 10
+FFT_SIZE = 400
+NUM_FEATURE_DATA = FFT_SIZE // 2 + 1
 
 FREESOUND_AUTH_PATH = f"{PREFIX_DIR}/freesound_auth.json"
 DATA_PATH = f"{PICKLE_DIR}data.pickle"
@@ -39,23 +45,63 @@ class AudioClassifierModule(torch.nn.Module):
     def forward(self, x):
         return torch.sigmoid(self.layers(x))
 
-class AudioClassDataset(Dataset):
-    def __init__(self):
-        super().__init__()
-        self.data = []
-        self.labels = []
-        self.id_set = set()
+# class AudioClassDataset(Dataset):
+#     def __init__(self):
+#         super().__init__()
+#         self.data = []
+#         self.labels = []
+#         self.id_set = set()
     
-    def __getitem__(self, index):
-        if torch.cuda.is_available():
-            return self.data[index].to("cuda:0"), self.labels[index].to("cuda:0")
-        else:
-            return self.data[index], self.labels[index]
+#     def __getitem__(self, index):
+#         if torch.cuda.is_available():
+#             return self.data[index].to("cuda:0"), self.labels[index].to("cuda:0")
+#         else:
+#             return self.data[index], self.labels[index]
 
-    def __len__(self):
-        return len(self.data)
+#     def __len__(self):
+#         return len(self.data)
     
-    def add_sample(self, data, label, id):
-        self.data.append(data)
-        self.labels.append(label)
-        self.id_set.add(id)
+#     def add_sample(self, data, label, id):
+#         self.data.append(data)
+#         self.labels.append(label)
+#         self.id_set.add(id)
+
+class SamplesIterator:
+    def __init__(self, num_sounds, shuffle) -> None:
+        self.samples_queue = deque()
+        self.source_id_queue = deque()
+        self.db = AudioDatabase()
+        sound_ids = map(lambda elt: elt[1], self.db.get_sound_ids(num_sounds, shuffle).to_records())
+        self.source_id_queue.extend(sound_ids)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if len(self.samples_queue) == 0:
+            if len(self.source_id_queue) == 0:
+                raise StopIteration
+            source_id = self.source_id_queue.pop()
+
+            self.samples_queue.extend(self.db.get_samples_for_id(source_id).to_records())
+        
+        # TODO convert to tensor
+        x, y = self.samples_queue.pop()
+        return torch.Tensor(x), torch.Tensor(y)
+
+class SamplesDataset(IterableDataset):
+    def __init__(self, num_sounds, shuffle = False) -> None:
+        super().__init__()
+        self.num_sounds = num_sounds
+        self.shuffle = shuffle
+        self.it = None
+        self.db = AudioDatabase()
+
+    def __iter__(self):
+        self.it = SamplesIterator(self.num_sounds, self.shuffle)
+        return self.it
+    
+    def __len__(self):
+        return self.db.get_num_samples()
+    
+

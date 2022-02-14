@@ -1,23 +1,22 @@
 from math import ceil, floor
 import torch
-from torch.utils.data import random_split, DataLoader
+from torch.utils.data import random_split, DataLoader, SequentialSampler
 import pickle
 from common import *
 from db import AudioDatabase
 
-with open(DATA_PATH, "rb") as f:
-    dataset = pickle.load(f)
+num_sounds = 10
+train_sounds, test_sounds = (floor(num_sounds * 0.9), ceil(num_sounds * 0.1))
+train_data = SamplesDataset(train_sounds, shuffle=True)
+test_data = SamplesDataset(test_sounds, shuffle=True)
 
-num_in_features = dataset.data.shape[0]
-num_out_features = dataset.labels.shape[0]
-model = AudioClassifierModule(num_in_features, num_out_features)
+model = AudioClassifierModule(NUM_FEATURE_DATA, NUM_FEATURE_LABELS)
+db = AudioDatabase()
 
 learning_rate = 1e-3
 batch_size = 30
 epochs = 10
 
-data_lengths = (floor(len(dataset) * 0.9), ceil(len(dataset) * 0.1))
-train_data, test_data = random_split(dataset, data_lengths)
 train_dataloader = DataLoader(train_data, batch_size=batch_size)
 test_dataloader = DataLoader(test_data, batch_size=batch_size)
 
