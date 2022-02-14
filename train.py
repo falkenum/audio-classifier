@@ -39,7 +39,6 @@ def train_loop(dataloader, model, loss_fn, optimizer):
 
 
 def test_loop(dataloader, model, loss_fn):
-    # top_count = 3
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
     test_loss, correct = 0, 0
@@ -49,7 +48,7 @@ def test_loop(dataloader, model, loss_fn):
             pred = model(X)
             test_loss += loss_fn(pred, y).item()
             for row in pred:
-                correct += y == pred
+                correct += y == row
 
     test_loss /= num_batches
     correct /= size

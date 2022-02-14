@@ -55,9 +55,7 @@ class AudioClassDataset(Dataset):
     def __len__(self):
         return len(self.data)
     
-    def add_samples(self, data, label, id):
+    def add_sample(self, data, label, id):
         self.data.append(data)
-        for _ in range(data.shape[1]):
-            self.labels.append(label)
-
+        self.labels.append(label)
         self.id_set.add(id)
