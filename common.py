@@ -3,11 +3,10 @@ import torch
 import torchaudio
 import os
 
-SAMPLE_RATE = 48000
+SAMPLE_RATE = 44100
 PREFIX_DIR = os.path.dirname(__file__)
 PICKLE_DIR = f"{PREFIX_DIR}/pickle/"
 SOUNDS_DIR = f"{PREFIX_DIR}/sounds/"
-FEATURE_TAGS = ["guitar", "piano", "violin", "trumpet"]
 
 FREESOUND_AUTH_PATH = f"{PREFIX_DIR}/freesound_auth.json"
 DATA_PATH = f"{PICKLE_DIR}data.pickle"
@@ -24,39 +23,41 @@ if not os.path.exists(PICKLE_DIR):
 if not os.path.exists(SOUNDS_DIR):
     os.makedirs(SOUNDS_DIR)
 
+def load_wav(id):
+    return torchaudio.load(f"{SOUNDS_DIR}/{id}.wav")
+
 class AudioClassifierModule(torch.nn.Module):
     def __init__(self, in_features, out_features) -> None:
         super().__init__()
-        self.linear = torch.nn.Linear(in_features, out_features)
+        # self.layers = torch.nn.Linear(in_features, out_features)
+        self.layers = torch.nn.Sequential(
+            torch.nn.Linear(in_features, in_features),
+            torch.nn.AvgPool1d(10, 10),
+            torch.nn.Linear(in_features//10, out_features),
+        )
 
     def forward(self, x):
-        return self.linear(x)
+        return torch.sigmoid(self.layers(x))
 
 class AudioClassDataset(Dataset):
     def __init__(self):
         super().__init__()
-        self.data = None
-        self.labels = None
+        self.data = []
+        self.labels = []
         self.id_set = set()
     
     def __getitem__(self, index):
-        return self.data[:, index], self.labels[:, index]
+        if torch.cuda.is_available():
+            return self.data[index].to("cuda:0"), self.labels[index].to("cuda:0")
+        else:
+            return self.data[index], self.labels[index]
 
     def __len__(self):
-        return self.data.shape[1]
+        return len(self.data)
     
     def add_samples(self, data, label, id):
-
-        for i in range(data.shape[1]):
-            if self.data is not None:
-                self.data = torch.cat((self.data, data), 1)
-            else:
-                self.data = data
-
-            if self.labels is not None:
-                self.labels = torch.cat((self.labels, label), 1)
-            else:
-                self.labels = label
-
+        self.data.append(data)
+        for _ in range(data.shape[1]):
+            self.labels.append(label)
 
         self.id_set.add(id)

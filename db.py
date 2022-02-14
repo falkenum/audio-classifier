@@ -30,8 +30,9 @@ class AudioDatabase:
 
         self.conn.commit()
     
-    def query(self, query_str):
-        return pd.read_sql(query_str, self.conn)
+    def get_sounds(self, limit):
+        query = f"SELECT * FROM sounds ORDER BY id ASC LIMIT {limit}"
+        return pd.read_sql(query, self.conn)
 
 # db = Database()
 # db.insert_sounds([])

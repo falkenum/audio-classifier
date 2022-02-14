@@ -1,29 +1,52 @@
 from common import *
 from db import AudioDatabase
 import pickle
+import os
 
-dataset = AudioClassDataset()
+
+if os.path.exists(DATA_PATH):
+    with open(DATA_PATH, "rb") as f:
+        dataset = pickle.load(f)
+else:
+    dataset = AudioClassDataset()
 
 db = AudioDatabase()
-sounds = db.get_sounds()
+num_files_per_tag = 10
+spectrogram = torchaudio.transforms.Spectrogram()
 
-tag_to_feature = {}
-idx = 0
-for _, tags, _, _, _ in sounds:
-    for tag in tags:
-        if tag not in tag_to_feature:
-            tag_to_feature[tag] = idx
-            idx += 1
+query_result = list(db.get_sounds(limit=1200).to_records())
+tag_counts = {}
+for row, sound_id, sound_tags in query_result:
+    for sound_tag in sound_tags:
+        if sound_tag not in tag_counts.keys():
+            tag_counts[sound_tag] = 0
+        tag_counts[sound_tag] += 1
 
-num_out_features = len(tag_to_feature)
+tag_counts = [(k, v) for k, v in tag_counts.items()]
+def sort_key(elt):
+    k, v = elt
+    return v
+tag_counts.sort(key=sort_key, reverse=True)
+num_feature_tags = 10
+tags = map(lambda elt: elt[0], tag_counts[:num_feature_tags])
 
-for id, tags, se_mean, se_max, se_min in sounds:
-    in_features = torch.Tensor([[se_mean, se_max, se_min]]).T
+tag_to_feature = {tag: idx for idx, tag in enumerate(tags)}
 
-    label = torch.zeros(num_out_features, 1)
-    for tag in tags:
-        label[tag_to_feature[tag], 0] = 1
-    dataset.add_samples(in_features, label, id)
+for row, sound_id, sound_tags in query_result:
+    if sound_id not in dataset.id_set:
+        raw_sound, fs = load_wav(sound_id)
+
+        resampler = torchaudio.transforms.Resample(fs, SAMPLE_RATE)
+        # only using first channel for now
+        resampled_sound = resampler(raw_sound[0])
+        spec = spectrogram(resampled_sound)
+
+        label = torch.zeros(num_feature_tags, 1)
+        for sound_tag in sound_tags:
+            if tag_to_feature.get(sound_tag) is not None:
+                label[tag_to_feature[sound_tag], 0] = 1
+
+        dataset.add_samples(spec, label, sound_id)
 
 with open(DATA_PATH, "wb") as f:
     pickle.dump(dataset, f)

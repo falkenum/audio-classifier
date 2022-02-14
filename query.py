@@ -3,7 +3,7 @@ import freesound
 import json
 import os
 from db import AudioDatabase
-from common import FEATURE_TAGS, FREESOUND_AUTH_PATH, SOUNDS_DIR
+from common import FREESOUND_AUTH_PATH, SOUNDS_DIR
 
 client = freesound.FreesoundClient()
 with open(FREESOUND_AUTH_PATH) as f:
@@ -16,12 +16,11 @@ extension = "wav"
 
 db = AudioDatabase()
 
-for tag in FEATURE_TAGS:
+query_tags = ["guitar", "piano", "violin", "trumpet"]
+for tag in query_tags:
     for page in range(1, MAX_PAGE+1):
         print(f"{tag}: page {page}")
         sounds = client.text_search(query="", filter=f"duration:[0 TO 30] type:{extension} tag:{tag}", page=page, page_size=page_size, fields="id,tags", sort="downloads_desc")
-
-        db.insert_sounds(sounds)
 
         for sound in sounds:
             filename = f"{sound.id}.{extension}"
@@ -34,3 +33,4 @@ for tag in FEATURE_TAGS:
                     except ContentTooShortError:
                         print("download failed, trying again")
 
+        db.insert_sounds(sounds)
