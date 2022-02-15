@@ -24,13 +24,13 @@ train_dataloader = DataLoader(train_data, batch_size=batch_size, drop_last=True)
 test_dataloader = DataLoader(test_data, batch_size=batch_size, drop_last=True)
 
 def train_loop(dataloader, model, loss_fn, optimizer):
-    losses = []
+    # losses = []
     # size = len(dataloader.dataset)
     for batch, (X, y) in enumerate(dataloader):
         # Compute prediction and loss
         pred = model(X)
         loss = loss_fn(pred, y)
-        losses.append(loss.item())
+        # losses.append(loss.item())
 
         # Backpropagation
         optimizer.zero_grad()
@@ -38,13 +38,10 @@ def train_loop(dataloader, model, loss_fn, optimizer):
         optimizer.step()
 
         if batch % 100 == 0:
-            loss = np.average(losses)
-            losses = []
+            loss = loss.item()
             current = batch * len(X)
             print(f"loss: {loss:>7f}  [{current:>5d}]")
-    return losses
-
-
+    
 def test_loop(dataloader, model, loss_fn):
     size = 0
     num_batches = 0
@@ -95,7 +92,8 @@ def test_loop(dataloader, model, loss_fn):
     print()
 
 loss_fn = torch.nn.BCELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
+optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=5e-5)
+# optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, weight_decay=5e-4)
 
 for t in range(epochs):
     print(f"Epoch {t+1}\n-------------------------------")
