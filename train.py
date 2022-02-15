@@ -42,23 +42,55 @@ def test_loop(dataloader, model, loss_fn):
     size = 0
     num_batches = 0
     test_loss, correct = 0, 0
+    positive_pred_correct = 0
+    negative_pred_correct = 0
+    positive_preds = 0
+    negative_preds = 0
 
     with torch.no_grad():
         for X, y in dataloader:
             pred = model(X)
             test_loss += loss_fn(pred, y).item()
+            #print("y shape", y.shape)
+            #print("pred max", pred.max())
+            #print("pred min", pred.min())
             for row_idx, pred_row in enumerate(pred):
                 pred_row = pred_row.round().int()
                 correct += 1 if torch.all(y[row_idx].int().eq(pred_row)) else 0
+                # TODO handle more than one channel here
+                pred_row = pred_row.squeeze()
+                #print("pred_row", pred_row)
+                for col_idx, pred_elt in enumerate(pred_row):
+                    #print("pred_elt", pred_elt)
+                    #print("pred_elt shape", pred_elt.shape)
+                    y_elt = y[row_idx].squeeze()[col_idx].int()
+                    if pred_elt == 1:
+                        positive_preds += 1
+                        if y_elt == 1:
+                            positive_pred_correct += 1
+                    else:
+                        negative_preds += 1
+                        if y_elt == 0:
+                            negative_pred_correct += 1
+
 
             size += len(X)
             num_batches += 1
 
+    tag_preds = positive_preds + negative_preds
+    tag_pred_correct = (positive_pred_correct + negative_pred_correct) / tag_preds
+    negative_pred_correct /= negative_preds
+    positive_pred_correct /= positive_preds
+
     test_loss /= num_batches
     correct /= size
-    print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
+    print(f"\tPrediction total accuracy: {(100*correct):>0.1f}%")
+    print(f"\tPrediction tag accuracy: {(100*tag_pred_correct):>0.1f}%")
+    print(f"\tPos pred accuracy: {(100*positive_pred_correct):>0.1f}%")
+    print(f"\tNeg pred accuracy: {(100*negative_pred_correct):>0.1f}%")
+    print()
 
-loss_fn = torch.nn.BCEWithLogitsLoss()
+loss_fn = torch.nn.BCELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 for t in range(epochs):

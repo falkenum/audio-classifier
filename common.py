@@ -48,7 +48,7 @@ class AudioClassifierModule(torch.nn.Module):
         )
 
     def forward(self, x):
-        return self.layers(x)
+        return torch.sigmoid(self.layers(x))
 
 class SamplesDataset(IterableDataset):
     def __init__(self, num_sounds, shuffle = False, chunk_size = 1000) -> None:
