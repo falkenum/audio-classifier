@@ -15,7 +15,7 @@ PICKLE_DIR = f"{PREFIX_DIR}/pickle/"
 SOUNDS_DIR = f"{PREFIX_DIR}/sounds/"
 NUM_FEATURE_LABELS = 5
 FFT_SIZE = 1024
-NUM_FEATURE_DATA = FFT_SIZE // 2 + 1
+NUM_FEATURE_DATA = 1
 
 FREESOUND_AUTH_PATH = f"{PREFIX_DIR}/freesound_auth.json"
 DATA_PATH = f"{PICKLE_DIR}data.pickle"
@@ -37,21 +37,23 @@ class AudioClassifierModule(torch.nn.Module):
     def __init__(self, n_input, n_output) -> None:
         super().__init__()
         # self.layers = torch.nn.Linear(in_features, out_features)
+        n_channel = 16
+        # self.layers = torch.nn.Linear(in_features, out_features)
         self.layers = torch.nn.Sequential(
-            nn.Conv1d(in_channels=n_input, out_channels=n_input // 4, stride=5, kernel_size=25, padding=10),
+            nn.Conv1d(in_channels=n_input, out_channels=n_channel, stride=5, kernel_size=25, padding=10),
             nn.ReLU(),
-            # nn.BatchNorm1d(n_channel),
-            nn.Conv1d(in_channels=n_input // 4, out_channels=n_input // 16, stride=5, kernel_size=15, padding=5),
+            nn.BatchNorm1d(n_channel),
+            nn.MaxPool1d(5),
+            nn.Conv1d(in_channels=n_channel, out_channels=n_channel, stride=1, kernel_size=15, padding='same'),
             nn.ReLU(),
+            nn.BatchNorm1d(n_channel),
+            nn.MaxPool1d(4),
+            nn.Conv1d(in_channels=n_channel, out_channels=1, stride=5, kernel_size=5, padding=0),
             # nn.BatchNorm1d(n_channel),
-            nn.AvgPool1d(2),
-            nn.Conv1d(in_channels=n_input // 16, out_channels=1, stride=1, kernel_size=5, padding='same'),
-            # nn.BatchNorm1d(n_channel),
-            # nn.Linear(in_features=n_output, out_features=n_output),
-            nn.Sigmoid(),
-
-            nn.Flatten(start_dim=1, end_dim=2),
-            # nn.BatchNorm1d(n_output),
+            nn.MaxPool1d(4),
+            nn.Linear(in_features=n_output, out_features=n_output),
+            nn.Flatten(1, 2),
+            nn.Sigmoid()
         )
 
     def forward(self, x):
@@ -64,7 +66,7 @@ class AudioClassifierModule(torch.nn.Module):
         return self.layers(x)
 
 class SamplesDataset(IterableDataset):
-    def __init__(self, num_sounds, shuffle = False, chunk_size = 250) -> None:
+    def __init__(self, num_sounds, shuffle = False, chunk_size = 10000) -> None:
         super().__init__()
         self.num_sounds = num_sounds
         self.shuffle = shuffle
@@ -117,12 +119,12 @@ class SamplesDataset(IterableDataset):
                 resampler = torchaudio.transforms.Resample(fs, SAMPLE_RATE)
 
                 # only first channel for now
-                resampled_sound = resampler(raw_sound)[0]
+                resampled_sound = resampler(raw_sound)[0:1]
                 # sound_spec = self.mag_db(self.spectrogram(resampled_sound))
-                sound_spec = self.spectrogram(resampled_sound)
+                # sound_spec = self.spectrogram(resampled_sound)
                 offset = 0
-                while offset + self.chunk_size < sound_spec.shape[1]:
-                    new_chunk = sound_spec[:, offset:offset+self.chunk_size]
+                while offset + self.chunk_size < resampled_sound.shape[1]:
+                    new_chunk = resampled_sound[:, offset:offset+self.chunk_size]
                     if new_chunk.shape[1] != self.chunk_size:
                         break
                     self.data_queue.append(new_chunk)

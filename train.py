@@ -17,7 +17,7 @@ model = AudioClassifierModule(NUM_FEATURE_DATA, NUM_FEATURE_LABELS).cuda(0)
 db = AudioDatabase()
 
 learning_rate = 1e-3
-batch_size = 8
+batch_size = 20
 epochs = 20
 
 train_dataloader = DataLoader(train_data, batch_size=batch_size, drop_last=True)
