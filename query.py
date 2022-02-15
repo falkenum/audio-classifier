@@ -16,11 +16,12 @@ extension = "wav"
 
 db = AudioDatabase()
 
-query_tags = ["guitar", "piano", "violin", "trumpet"]
+# query_tags = ["guitar", "piano", "violin", "trumpet"]
+query_tags = []
 for tag in query_tags:
     for page in range(1, MAX_PAGE+1):
         print(f"{tag}: page {page}")
-        sounds = client.text_search(query="", filter=f"duration:[0 TO 30] type:{extension} tag:{tag}", page=page, page_size=page_size, fields="id,tags", sort="downloads_desc")
+        sounds = client.text_search(query="", filter=f"duration:[3 TO 20] type:{extension} tag:{tag}", page=page, page_size=page_size, fields="id,tags", sort="downloads_desc")
 
         for sound in sounds:
             filename = f"{sound.id}.{extension}"

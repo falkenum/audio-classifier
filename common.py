@@ -37,18 +37,17 @@ class AudioClassifierModule(torch.nn.Module):
         n_channel = 16
         # self.layers = torch.nn.Linear(in_features, out_features)
         self.layers = torch.nn.Sequential(
-            nn.Conv1d(in_channels=n_input, out_channels=n_channel, kernel_size=25, padding='same'),
+            nn.Conv1d(in_channels=n_input, out_channels=n_channel, stride=5, kernel_size=25, padding=10),
             nn.ReLU(),
             nn.BatchNorm1d(n_channel),
-            nn.MaxPool1d(25),
-            nn.Conv1d(in_channels=n_channel, out_channels=n_channel, kernel_size=5, padding='same'),
+            nn.MaxPool1d(5),
+            nn.Conv1d(in_channels=n_channel, out_channels=n_channel, stride=5, kernel_size=15, padding=5),
             nn.ReLU(),
             nn.BatchNorm1d(n_channel),
-            nn.MaxPool1d(40),
-            nn.Conv1d(in_channels=n_channel, out_channels=1, kernel_size=5, padding='same'),
-            nn.ReLU(),
+            nn.MaxPool1d(4),
+            nn.Conv1d(in_channels=n_channel, out_channels=1, stride=5, kernel_size=5, padding=0),
             # nn.BatchNorm1d(n_channel),
-            nn.MaxPool1d(10),
+            nn.MaxPool1d(4),
             nn.Linear(in_features=n_output, out_features=n_output),
         )
 
