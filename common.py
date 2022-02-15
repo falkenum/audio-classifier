@@ -34,24 +34,27 @@ def load_wav(id):
 class AudioClassifierModule(torch.nn.Module):
     def __init__(self, n_input, n_output) -> None:
         super().__init__()
-        n_channel = 1
-        stride = 32
+        n_channel = 16
+        stride = 40
         # self.layers = torch.nn.Linear(in_features, out_features)
         self.layers = torch.nn.Sequential(
-            nn.Conv1d(n_input, n_channel, kernel_size=80, stride=stride),
+            nn.Conv1d(n_input, n_channel, kernel_size=100, stride=stride),
             nn.BatchNorm1d(n_channel),
-            nn.MaxPool1d(4),
+            nn.MaxPool1d(25),
             nn.Conv1d(n_channel, n_channel, kernel_size=3),
-            nn.BatchNorm1d(n_channel),
-            nn.MaxPool1d(4),
             nn.Linear(n_channel, n_output),
         )
 
     def forward(self, x):
-        return torch.sigmoid(self.layers(x))
+        print(x.shape)
+        for layer in self.layers:
+            x = layer(x)
+            print(x.shape, "after layer", layer)
+        #self.layers(x)
+        return torch.sigmoid(x)
 
 class SamplesDataset(IterableDataset):
-    def __init__(self, num_sounds, shuffle = False, chunk_size = 1000) -> None:
+    def __init__(self, num_sounds, shuffle = False, chunk_size = 10000) -> None:
         super().__init__()
         self.num_sounds = num_sounds
         self.shuffle = shuffle

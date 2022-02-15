@@ -6,8 +6,8 @@ import pickle
 from common import *
 from db import AudioDatabase
 
-num_sounds = 50
-train_sounds, test_sounds = (floor(num_sounds * 0.9), ceil(num_sounds * 0.1))
+num_sounds = 500
+train_sounds, test_sounds = (floor(num_sounds * 0.8), ceil(num_sounds * 0.2))
 train_data = SamplesDataset(train_sounds, shuffle=True)
 test_data = SamplesDataset(test_sounds, shuffle=True)
 
@@ -16,7 +16,7 @@ db = AudioDatabase()
 
 learning_rate = 1e-3
 batch_size = 20
-epochs = 100
+epochs = 20
 
 train_dataloader = DataLoader(train_data, batch_size=batch_size, drop_last=True)
 test_dataloader = DataLoader(test_data, batch_size=batch_size, drop_last=True)
