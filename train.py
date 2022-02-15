@@ -5,28 +5,32 @@ from torch.utils.data import random_split, DataLoader, SequentialSampler
 import pickle
 from common import *
 from db import AudioDatabase
+from matplotlib import pyplot as plt
+import numpy as np
 
 num_sounds = 1150
-train_sounds, test_sounds = (floor(num_sounds * 0.8), ceil(num_sounds * 0.2))
+train_sounds, test_sounds = (floor(num_sounds * 0.9), ceil(num_sounds * 0.1))
 train_data = SamplesDataset(train_sounds, shuffle=True)
 test_data = SamplesDataset(test_sounds, shuffle=True)
 
-model = AudioClassifierModule(1, NUM_FEATURE_LABELS).cuda(0)
+model = AudioClassifierModule(NUM_FEATURE_DATA, NUM_FEATURE_LABELS).cuda(0)
 db = AudioDatabase()
 
-learning_rate = 1e-2
-batch_size = 5
+learning_rate = 1e-3
+batch_size = 8
 epochs = 20
 
 train_dataloader = DataLoader(train_data, batch_size=batch_size, drop_last=True)
 test_dataloader = DataLoader(test_data, batch_size=batch_size, drop_last=True)
 
 def train_loop(dataloader, model, loss_fn, optimizer):
+    losses = []
     # size = len(dataloader.dataset)
     for batch, (X, y) in enumerate(dataloader):
         # Compute prediction and loss
         pred = model(X)
         loss = loss_fn(pred, y)
+        losses.append(loss.item())
 
         # Backpropagation
         optimizer.zero_grad()
@@ -34,8 +38,11 @@ def train_loop(dataloader, model, loss_fn, optimizer):
         optimizer.step()
 
         if batch % 100 == 0:
-            loss, current = loss.item(), batch * len(X)
+            loss = np.average(losses)
+            losses = []
+            current = batch * len(X)
             print(f"loss: {loss:>7f}  [{current:>5d}]")
+    return losses
 
 
 def test_loop(dataloader, model, loss_fn):
@@ -88,7 +95,7 @@ def test_loop(dataloader, model, loss_fn):
     print()
 
 loss_fn = torch.nn.BCELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
 
 for t in range(epochs):
     print(f"Epoch {t+1}\n-------------------------------")
