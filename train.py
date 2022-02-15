@@ -1,4 +1,4 @@
-from math import ceil, floor
+from math import ceil, floor, nan
 from numpy import count_nonzero
 import torch
 from torch.utils.data import random_split, DataLoader, SequentialSampler
@@ -6,7 +6,7 @@ import pickle
 from common import *
 from db import AudioDatabase
 
-num_sounds = 500
+num_sounds = 1150
 train_sounds, test_sounds = (floor(num_sounds * 0.8), ceil(num_sounds * 0.2))
 train_data = SamplesDataset(train_sounds, shuffle=True)
 test_data = SamplesDataset(test_sounds, shuffle=True)
@@ -14,8 +14,8 @@ test_data = SamplesDataset(test_sounds, shuffle=True)
 model = AudioClassifierModule(1, NUM_FEATURE_LABELS).cuda(0)
 db = AudioDatabase()
 
-learning_rate = 1e-3
-batch_size = 20
+learning_rate = 1e-2
+batch_size = 5
 epochs = 20
 
 train_dataloader = DataLoader(train_data, batch_size=batch_size, drop_last=True)
@@ -51,18 +51,12 @@ def test_loop(dataloader, model, loss_fn):
         for X, y in dataloader:
             pred = model(X)
             test_loss += loss_fn(pred, y).item()
-            #print("y shape", y.shape)
-            #print("pred max", pred.max())
-            #print("pred min", pred.min())
             for row_idx, pred_row in enumerate(pred):
                 pred_row = pred_row.round().int()
                 correct += 1 if torch.all(y[row_idx].int().eq(pred_row)) else 0
                 # TODO handle more than one channel here
                 pred_row = pred_row.squeeze()
-                #print("pred_row", pred_row)
                 for col_idx, pred_elt in enumerate(pred_row):
-                    #print("pred_elt", pred_elt)
-                    #print("pred_elt shape", pred_elt.shape)
                     y_elt = y[row_idx].squeeze()[col_idx].int()
                     if pred_elt == 1:
                         positive_preds += 1
@@ -79,15 +73,18 @@ def test_loop(dataloader, model, loss_fn):
 
     tag_preds = positive_preds + negative_preds
     tag_pred_correct = (positive_pred_correct + negative_pred_correct) / tag_preds
-    negative_pred_correct /= negative_preds
-    positive_pred_correct /= positive_preds
+    # negative_pred_correct /= negative_preds
+    # positive_pred_correct /= positive_preds
+    
+    neg_accuracy = negative_pred_correct / negative_preds if negative_preds > 0 else nan
+    pos_accuracy = positive_pred_correct / positive_preds if positive_preds > 0 else nan
 
     test_loss /= num_batches
     correct /= size
-    print(f"\tPrediction total accuracy: {(100*correct):>0.1f}%")
-    print(f"\tPrediction tag accuracy: {(100*tag_pred_correct):>0.1f}%")
-    print(f"\tPos pred accuracy: {(100*positive_pred_correct):>0.1f}%")
-    print(f"\tNeg pred accuracy: {(100*negative_pred_correct):>0.1f}%")
+    print(f"Complete match rate: {(100*correct):>0.1f}%")
+    print(f"Predicition accuracy: {(100*tag_pred_correct):>0.1f}%")
+    print(f"Positive prediction accuracy: {(100*pos_accuracy):>0.1f}% ({positive_pred_correct}/{positive_preds})")
+    print(f"Negative prediction accuracy: {(100*neg_accuracy):>0.1f}% ({negative_pred_correct}/{negative_preds})")
     print()
 
 loss_fn = torch.nn.BCELoss()

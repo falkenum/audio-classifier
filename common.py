@@ -35,26 +35,32 @@ class AudioClassifierModule(torch.nn.Module):
     def __init__(self, n_input, n_output) -> None:
         super().__init__()
         n_channel = 16
-        stride = 40
         # self.layers = torch.nn.Linear(in_features, out_features)
         self.layers = torch.nn.Sequential(
-            nn.Conv1d(n_input, n_channel, kernel_size=100, stride=stride),
+            nn.Conv1d(in_channels=n_input, out_channels=n_channel, kernel_size=25, padding='same'),
+            nn.ReLU(),
             nn.BatchNorm1d(n_channel),
             nn.MaxPool1d(25),
-            nn.Conv1d(n_channel, n_channel, kernel_size=3),
-            nn.Linear(n_channel, n_output),
+            nn.Conv1d(in_channels=n_channel, out_channels=n_channel, kernel_size=5, padding='same'),
+            nn.ReLU(),
+            nn.BatchNorm1d(n_channel),
+            nn.MaxPool1d(40),
+            nn.Conv1d(in_channels=n_channel, out_channels=1, kernel_size=5, padding='same'),
+            nn.ReLU(),
+            # nn.BatchNorm1d(n_channel),
+            nn.MaxPool1d(10),
+            nn.Linear(in_features=n_output, out_features=n_output),
         )
 
     def forward(self, x):
-        print(x.shape)
-        for layer in self.layers:
-            x = layer(x)
-            print(x.shape, "after layer", layer)
-        #self.layers(x)
-        return torch.sigmoid(x)
+        # print(x.shape)
+        # for layer in self.layers:
+        #     x = layer(x)
+        #     print(x.shape, "after layer", layer)
+        return torch.sigmoid(self.layers(x))
 
 class SamplesDataset(IterableDataset):
-    def __init__(self, num_sounds, shuffle = False, chunk_size = 10000) -> None:
+    def __init__(self, num_sounds, shuffle = False, chunk_size = 100000) -> None:
         super().__init__()
         self.num_sounds = num_sounds
         self.shuffle = shuffle
@@ -99,20 +105,24 @@ class SamplesDataset(IterableDataset):
         if len(self.data_queue) == 0:
             if len(self.sound_queue) == 0:
                 raise StopIteration
-            sound_id, label = self.sound_queue.pop()
-            self.next_label = label
-            raw_sound, fs = load_wav(sound_id)
-            resampler = torchaudio.transforms.Resample(fs, SAMPLE_RATE)
+            while True:
+                sound_id, label = self.sound_queue.pop()
+                self.next_label = label
+                raw_sound, fs = load_wav(sound_id)
+                resampler = torchaudio.transforms.Resample(fs, SAMPLE_RATE)
 
-            # only first channel for now
-            resampled_sound = resampler(raw_sound)[0:1]
-            offset = 0
-            while offset + self.chunk_size < resampled_sound.shape[1]:
-                new_chunk = resampled_sound[:, offset:offset+self.chunk_size]
-                if new_chunk.shape[1] != self.chunk_size:
+                # only first channel for now
+                resampled_sound = resampler(raw_sound)[0:1]
+                offset = 0
+                while offset + self.chunk_size < resampled_sound.shape[1]:
+                    new_chunk = resampled_sound[:, offset:offset+self.chunk_size]
+                    if new_chunk.shape[1] != self.chunk_size:
+                        break
+                    self.data_queue.append(new_chunk)
+                    offset += self.chunk_size
+                if len(self.data_queue) > 0:
                     break
-                self.data_queue.append(new_chunk)
-                offset += self.chunk_size
+            
 
         data = self.data_queue.pop()
         return data.cuda(0), self.next_label[None, :].cuda(0)
