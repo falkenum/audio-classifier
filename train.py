@@ -6,19 +6,25 @@ import pickle
 from common import *
 from db import AudioDatabase
 from matplotlib import pyplot as plt
+import matplotlib
 import numpy as np
-
-num_sounds = 1150
-train_sounds, test_sounds = (floor(num_sounds * 0.9), ceil(num_sounds * 0.1))
-train_data = SamplesDataset(train_sounds, shuffle=True)
-test_data = SamplesDataset(test_sounds, shuffle=True)
-
-model = AudioClassifierModule(NUM_FEATURE_DATA, NUM_FEATURE_LABELS).cuda(0)
+matplotlib.use("WebAgg")
 db = AudioDatabase()
 
+num_sounds = 300
+chunk_size = 64000
+num_feature_labels = db.get_num_birds()
 learning_rate = 1e-3
-batch_size = 20
+batch_size = 25
 epochs = 20
+dataset_type = BirdsDataset
+
+train_sounds, test_sounds = (floor(num_sounds * 0.9), ceil(num_sounds * 0.1))
+train_data = dataset_type(train_sounds, chunk_size, shuffle=True)
+test_data = dataset_type(test_sounds, chunk_size, shuffle=True)
+
+model = AudioClassifierModule(1, num_feature_labels, chunk_size).cuda(0)
+
 
 train_dataloader = DataLoader(train_data, batch_size=batch_size, drop_last=True)
 test_dataloader = DataLoader(test_data, batch_size=batch_size, drop_last=True)
@@ -46,52 +52,29 @@ def test_loop(dataloader, model, loss_fn):
     size = 0
     num_batches = 0
     test_loss, correct = 0, 0
-    positive_pred_correct = 0
-    negative_pred_correct = 0
-    positive_preds = 0
-    negative_preds = 0
+    losses = []
 
     with torch.no_grad():
         for X, y in dataloader:
             pred = model(X)
-            test_loss += loss_fn(pred, y).item()
-            for row_idx, pred_row in enumerate(pred):
-                pred_row = pred_row.round().int()
-                correct += 1 if torch.all(y[row_idx].int().eq(pred_row)) else 0
-                # TODO handle more than one channel here
-                pred_row = pred_row.squeeze()
-                for col_idx, pred_elt in enumerate(pred_row):
-                    y_elt = y[row_idx].squeeze()[col_idx].int()
-                    if pred_elt == 1:
-                        positive_preds += 1
-                        if y_elt == 1:
-                            positive_pred_correct += 1
-                    else:
-                        negative_preds += 1
-                        if y_elt == 0:
-                            negative_pred_correct += 1
+            losses.append(loss_fn(pred, y).item())
+            test_loss += losses[-1]
 
+            pred = torch.argmax(pred, 1)
+            for row_idx, pred_val in enumerate(pred):
+                correct += y[row_idx] == pred_val
 
             size += len(X)
             num_batches += 1
 
-    tag_preds = positive_preds + negative_preds
-    tag_pred_correct = (positive_pred_correct + negative_pred_correct) / tag_preds
-    # negative_pred_correct /= negative_preds
-    # positive_pred_correct /= positive_preds
-    
-    neg_accuracy = negative_pred_correct / negative_preds if negative_preds > 0 else nan
-    pos_accuracy = positive_pred_correct / positive_preds if positive_preds > 0 else nan
-
-    test_loss /= num_batches
-    correct /= size
-    print(f"Complete match rate: {(100*correct):>0.1f}%")
-    print(f"Predicition accuracy: {(100*tag_pred_correct):>0.1f}%")
-    print(f"Positive prediction accuracy: {(100*pos_accuracy):>0.1f}% ({positive_pred_correct}/{positive_preds})")
-    print(f"Negative prediction accuracy: {(100*neg_accuracy):>0.1f}% ({negative_pred_correct}/{negative_preds})")
+    avg_loss = test_loss / num_batches
+    accuracy = correct / size
+    print(f"Predicition accuracy: {(100*accuracy):>0.1f}% ({correct}/{size}")
+    print(f"Avg loss: {avg_loss:>0.4f}")
     print()
 
-loss_fn = torch.nn.BCELoss()
+
+loss_fn = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=5e-5)
 # optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, weight_decay=5e-4)
 
@@ -100,6 +83,7 @@ for t in range(epochs):
     train_loop(train_dataloader, model, loss_fn, optimizer)
     test_loop(test_dataloader, model, loss_fn)
 print("Done!")
-
+# plt.plot(range(10))
+# plt.show()
 with open(MODEL_PATH, "wb") as f:
     pickle.dump(model, f)

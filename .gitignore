@@ -1,6 +1,7 @@
 .vscode
 __pycache__
-sounds
+music-sounds
+bird-sounds
 pickle
 freesound_reauth.sh
 freesound_auth.json
