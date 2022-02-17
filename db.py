@@ -32,6 +32,14 @@ class AudioDatabase:
             assert(False)
         return pd.read_sql(query, self.conn).to_records(index=False)
 
+    def get_catdog_sounds(self, limit, shuffle=False):
+        if shuffle:
+            query = f"SELECT * FROM catdog ORDER BY RANDOM () LIMIT {limit}"
+        else:
+            # TODO
+            assert(False)
+        return pd.read_sql(query, self.conn).to_records(index=False)
+
     def get_num_birds(self):
         cur = self.conn.cursor()
         query = f"SELECT COUNT(*) FROM (SELECT DISTINCT ebird_code FROM birds) AS unique_birds"

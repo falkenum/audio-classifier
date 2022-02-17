@@ -14,7 +14,7 @@ PREFIX_DIR = os.path.dirname(__file__)
 PICKLE_DIR = f"{PREFIX_DIR}/pickle/"
 MUSIC_SOUNDS_DIR = f"{PREFIX_DIR}/music-sounds/"
 BIRD_SOUNDS_DIR = f"{PREFIX_DIR}/bird-sounds/"
-# FFT_SIZE = 1024
+FFT_SIZE = 1024
 FREESOUND_AUTH_PATH = f"{PREFIX_DIR}/freesound_auth.json"
 DATA_PATH = f"{PICKLE_DIR}data.pickle"
 # TAGS_PATH = f"{PICKLE_DIR}tags.pickle"
@@ -34,30 +34,46 @@ def load_wav(id):
 class AudioClassifierModule(torch.nn.Module):
     def __init__(self, n_input, n_output, chunk_size) -> None:
         super().__init__()
-        # self.layers = torch.nn.Linear(in_features, out_features)
         n_channel = 32
-        # self.layers = torch.nn.Linear(in_features, out_features)
-        assert(n_input == 1)
         assert(chunk_size % 800 == 0)
         self.layers = torch.nn.Sequential(
             nn.Conv1d(in_channels=n_input, out_channels=n_channel, stride=1, kernel_size=25, padding='same'),
             nn.ReLU(),
             nn.BatchNorm1d(n_channel),
             nn.MaxPool1d(5),
-            nn.Conv1d(in_channels=n_channel, out_channels=n_channel, stride=1, kernel_size=15, padding='same'),
+            nn.Conv1d(in_channels=n_channel, out_channels=n_channel//2, stride=1, kernel_size=15, padding='same'),
             nn.ReLU(),
-            nn.BatchNorm1d(n_channel),
+            nn.BatchNorm1d(n_channel//2),
             nn.MaxPool1d(4),
-            nn.Conv1d(in_channels=n_channel, out_channels=n_channel, stride=1, kernel_size=5, padding='same'),
+            nn.Conv1d(in_channels=n_channel//2, out_channels=n_channel//4, stride=1, kernel_size=5, padding='same'),
             nn.ReLU(),
             nn.MaxPool1d(10),
-            nn.Conv1d(in_channels=n_channel, out_channels=1, stride=1, kernel_size=5, padding='same'),
+            nn.Conv1d(in_channels=n_channel//4, out_channels=1, stride=1, kernel_size=5, padding='same'),
             nn.ReLU(),
             nn.MaxPool1d(4),
             nn.Linear(in_features=chunk_size//800, out_features=n_output),
             nn.Flatten(1, 2),
-            # nn.Sigmoid()
         )
+        # n_channel = n_input
+        # assert(chunk_size % 800 == 0)
+        # self.layers = torch.nn.Sequential(
+        #     nn.Conv1d(in_channels=n_input, out_channels=n_channel//2, stride=1, kernel_size=25, padding='same'),
+        #     nn.ReLU(),
+        #     nn.BatchNorm1d(n_channel//2),
+        #     nn.MaxPool1d(5),
+        #     nn.Conv1d(in_channels=n_channel//2, out_channels=n_channel//4, stride=1, kernel_size=15, padding='same'),
+        #     nn.ReLU(),
+        #     nn.BatchNorm1d(n_channel//4),
+        #     nn.MaxPool1d(4),
+        #     nn.Conv1d(in_channels=n_channel//4, out_channels=n_channel//8, stride=1, kernel_size=5, padding='same'),
+        #     nn.ReLU(),
+        #     nn.MaxPool1d(10),
+        #     nn.Conv1d(in_channels=n_channel//8, out_channels=1, stride=1, kernel_size=5, padding='same'),
+        #     nn.ReLU(),
+        #     nn.MaxPool1d(4),
+        #     nn.Linear(in_features=chunk_size//80, out_features=n_output),
+        #     nn.Flatten(1, 2),
+        # )
 
     def forward(self, x):
         # print(x.shape)
@@ -67,6 +83,64 @@ class AudioClassifierModule(torch.nn.Module):
         # return x
         
         return self.layers(x)
+
+class CatDogDataset(IterableDataset):
+    def __init__(self, num_sounds, chunk_size, shuffle = False) -> None:
+        super().__init__()
+        self.num_sounds = num_sounds
+        self.shuffle = shuffle
+        self.chunk_size = chunk_size
+        self.db = AudioDatabase()
+        self.data_queue = None
+        self.next_label = None
+        self.sound_queue = None
+        self.sound_list = []
+        query_result = list(self.db.get_catdog_sounds(limit=self.num_sounds, shuffle=True))
+        # self.spectrogram = torchaudio.transforms.Spectrogram(FFT_SIZE, FFT_SIZE//2+1, FFT_SIZE//4)
+        # self.to_db = torchaudio.transforms.AmplitudeToDB()
+
+        types_list = ["cat", "dog"]
+        self.num_output_labels = 2
+
+        self.type_to_feature = {type: idx for idx, type in enumerate(types_list)}
+
+        for filename, animal_type in query_result:
+            label = torch.tensor(self.type_to_feature[animal_type])
+            self.sound_list.append((filename, label))
+    
+    def __iter__(self):
+        self.data_queue = deque()
+        self.sound_queue = deque()
+        self.sound_queue.extend(self.sound_list)
+        return self
+
+    def __next__(self):
+        if len(self.data_queue) == 0:
+            if len(self.sound_queue) == 0:
+                raise StopIteration
+            while True:
+                sound_file, label = self.sound_queue.pop()
+                self.next_label = label
+                sound, fs = torchaudio.load(sound_file)
+                assert(fs == 44100)
+                assert(sound.shape[0] == 1)
+
+                offset = 0
+                while offset + self.chunk_size < sound.shape[1]:
+                    new_chunk = sound[:, offset:offset+self.chunk_size]
+                    if new_chunk.shape[1] != self.chunk_size:
+                        break
+                    self.data_queue.append(new_chunk)
+                    offset += self.chunk_size
+                if len(self.data_queue) > 0:
+                    break
+            
+
+        data = self.data_queue.pop()
+        return data.cuda(0), self.next_label.cuda(0)
+    
+    def __len__(self):
+        return len(self.id_queue)
 
 class BirdsDataset(IterableDataset):
     def __init__(self, num_sounds, chunk_size, shuffle = False) -> None:
@@ -80,6 +154,8 @@ class BirdsDataset(IterableDataset):
         self.sound_queue = None
         self.sound_list = []
         query_result = list(self.db.get_bird_sounds(limit=self.num_sounds, shuffle=True))
+        self.spectrogram = torchaudio.transforms.Spectrogram(FFT_SIZE, FFT_SIZE//2+1, FFT_SIZE//4)
+        self.to_db = torchaudio.transforms.AmplitudeToDB()
 
         bird_names = set()
         for bird_name, filename in query_result:
@@ -111,6 +187,8 @@ class BirdsDataset(IterableDataset):
                 sound, fs = torchaudio.load(f"{BIRD_SOUNDS_DIR}/{sound_file}")
                 assert(fs == 32000)
                 assert(sound.shape[0] == 1)
+
+                sound = self.to_db(self.spectrogram(sound)).squeeze()
 
                 offset = 0
                 while offset + self.chunk_size < sound.shape[1]:

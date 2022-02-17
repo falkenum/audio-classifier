@@ -12,12 +12,12 @@ matplotlib.use("WebAgg")
 db = AudioDatabase()
 
 num_sounds = 300
-chunk_size = 64000
-num_feature_labels = db.get_num_birds()
+chunk_size = 32000
+num_feature_labels = 2
 learning_rate = 1e-3
-batch_size = 25
+batch_size = 10
 epochs = 20
-dataset_type = BirdsDataset
+dataset_type = CatDogDataset
 
 train_sounds, test_sounds = (floor(num_sounds * 0.9), ceil(num_sounds * 0.1))
 train_data = dataset_type(train_sounds, chunk_size, shuffle=True)
@@ -72,6 +72,8 @@ def test_loop(dataloader, model, loss_fn):
     print(f"Predicition accuracy: {(100*accuracy):>0.1f}% ({correct}/{size}")
     print(f"Avg loss: {avg_loss:>0.4f}")
     print()
+    # plt.plot(losses)
+    # plt.show()
 
 
 loss_fn = torch.nn.CrossEntropyLoss()
