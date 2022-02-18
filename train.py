@@ -11,19 +11,20 @@ import numpy as np
 matplotlib.use("WebAgg")
 db = AudioDatabase()
 
-num_sounds = 300
-chunk_size = 32000
-num_feature_labels = 2
+num_sounds = 1000
+chunk_size = 160000
+num_feature_labels = db.get_num_birds()
+num_feature_data = 1
 learning_rate = 1e-3
-batch_size = 10
+batch_size = 20
 epochs = 20
-dataset_type = CatDogDataset
+dataset_type = BirdsDataset
 
 train_sounds, test_sounds = (floor(num_sounds * 0.9), ceil(num_sounds * 0.1))
 train_data = dataset_type(train_sounds, chunk_size, shuffle=True)
 test_data = dataset_type(test_sounds, chunk_size, shuffle=True)
 
-model = AudioClassifierModule(1, num_feature_labels, chunk_size).cuda(0)
+model = AudioClassifierModule(num_feature_data, num_feature_labels, chunk_size).cuda(0)
 
 
 train_dataloader = DataLoader(train_data, batch_size=batch_size, drop_last=True)

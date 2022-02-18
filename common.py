@@ -8,6 +8,10 @@ from torch.utils.data import IterableDataset
 import torchaudio
 import os
 from db import AudioDatabase
+import sys
+from scipy.signal import get_window
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../sms-tools/software/models/'))
+import sineModel as SM
 
 # SAMPLE_RATE = 44100
 PREFIX_DIR = os.path.dirname(__file__)
@@ -55,7 +59,7 @@ class AudioClassifierModule(torch.nn.Module):
             nn.Flatten(1, 2),
         )
         # n_channel = n_input
-        # assert(chunk_size % 800 == 0)
+        # assert(chunk_size % 80 == 0)
         # self.layers = torch.nn.Sequential(
         #     nn.Conv1d(in_channels=n_input, out_channels=n_channel//2, stride=1, kernel_size=25, padding='same'),
         #     nn.ReLU(),
@@ -67,7 +71,6 @@ class AudioClassifierModule(torch.nn.Module):
         #     nn.MaxPool1d(4),
         #     nn.Conv1d(in_channels=n_channel//4, out_channels=n_channel//8, stride=1, kernel_size=5, padding='same'),
         #     nn.ReLU(),
-        #     nn.MaxPool1d(10),
         #     nn.Conv1d(in_channels=n_channel//8, out_channels=1, stride=1, kernel_size=5, padding='same'),
         #     nn.ReLU(),
         #     nn.MaxPool1d(4),
@@ -116,9 +119,9 @@ class CatDogDataset(IterableDataset):
 
     def __next__(self):
         if len(self.data_queue) == 0:
-            if len(self.sound_queue) == 0:
-                raise StopIteration
             while True:
+                if len(self.sound_queue) == 0:
+                    raise StopIteration
                 sound_file, label = self.sound_queue.pop()
                 self.next_label = label
                 sound, fs = torchaudio.load(sound_file)
@@ -154,8 +157,10 @@ class BirdsDataset(IterableDataset):
         self.sound_queue = None
         self.sound_list = []
         query_result = list(self.db.get_bird_sounds(limit=self.num_sounds, shuffle=True))
-        self.spectrogram = torchaudio.transforms.Spectrogram(FFT_SIZE, FFT_SIZE//2+1, FFT_SIZE//4)
-        self.to_db = torchaudio.transforms.AmplitudeToDB()
+        # self.spectrogram = torchaudio.transforms.MelSpectrogram(sample_rate=32000, n_fft=FFT_SIZE, win_length=FFT_SIZE//2+1, hop_length=FFT_SIZE//4)
+        self.spectrogram = torchaudio.transforms.Spectrogram(FFT_SIZE, FFT_SIZE//2+1, FFT_SIZE//4, power = 1)
+        self.ispectrogram = torchaudio.transforms.InverseSpectrogram(FFT_SIZE, FFT_SIZE//2+1, FFT_SIZE//4)
+        # self.to_db = torchaudio.transforms.AmplitudeToDB()
 
         bird_names = set()
         for bird_name, filename in query_result:
@@ -179,16 +184,23 @@ class BirdsDataset(IterableDataset):
 
     def __next__(self):
         if len(self.data_queue) == 0:
-            if len(self.sound_queue) == 0:
-                raise StopIteration
             while True:
+                if len(self.sound_queue) == 0:
+                    raise StopIteration
                 sound_file, label = self.sound_queue.pop()
                 self.next_label = label
-                sound, fs = torchaudio.load(f"{BIRD_SOUNDS_DIR}/{sound_file}")
+                sound, fs = torchaudio.load(f"bird-sounds-foreground/{sound_file}")
                 assert(fs == 32000)
                 assert(sound.shape[0] == 1)
 
-                sound = self.to_db(self.spectrogram(sound)).squeeze()
+                # sound = sound.squeeze()
+                # compute analysis window
+                # w = get_window("blackman", 513)
+                
+                # sound = SM.sineModel(sound.numpy(), fs, w, 1024, -60)
+                # sound = torch.FloatTensor(sound)[None, :]
+
+                # torchaudio.save(f"{BIRD_SOUNDS_DIR}/filtered_{sound_file}", sound, fs)
 
                 offset = 0
                 while offset + self.chunk_size < sound.shape[1]:
@@ -204,9 +216,6 @@ class BirdsDataset(IterableDataset):
         data = self.data_queue.pop()
         return data.cuda(0), self.next_label.cuda(0)
     
-    def __len__(self):
-        return len(self.id_queue)
-
 class MusicNotesDataset(IterableDataset):
     def __init__(self, num_sounds, chunk_size, shuffle = False) -> None:
         super().__init__()
