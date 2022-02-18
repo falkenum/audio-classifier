@@ -41,20 +41,20 @@ class AudioClassifierModule(torch.nn.Module):
         n_channel = 32
         assert(chunk_size % 800 == 0)
         self.layers = torch.nn.Sequential(
-            nn.Conv1d(in_channels=n_input, out_channels=n_channel, stride=1, kernel_size=25, padding='same'),
+            nn.Conv1d(in_channels=n_input, out_channels=n_channel, stride=10, kernel_size=1001, padding=500),
             nn.ReLU(),
             nn.BatchNorm1d(n_channel),
-            nn.MaxPool1d(5),
-            nn.Conv1d(in_channels=n_channel, out_channels=n_channel//2, stride=1, kernel_size=15, padding='same'),
+            # nn.MaxPool1d(5),
+            nn.Conv1d(in_channels=n_channel, out_channels=n_channel//2, stride=5, kernel_size=101, padding=50),
             nn.ReLU(),
             nn.BatchNorm1d(n_channel//2),
-            nn.MaxPool1d(4),
-            nn.Conv1d(in_channels=n_channel//2, out_channels=n_channel//4, stride=1, kernel_size=5, padding='same'),
+            # nn.MaxPool1d(4),
+            nn.Conv1d(in_channels=n_channel//2, out_channels=n_channel//4, stride=4, kernel_size=21, padding=10),
             nn.ReLU(),
-            nn.MaxPool1d(10),
-            nn.Conv1d(in_channels=n_channel//4, out_channels=1, stride=1, kernel_size=5, padding='same'),
+            # nn.MaxPool1d(10),
+            nn.Conv1d(in_channels=n_channel//4, out_channels=1, stride=4, kernel_size=5, padding=2),
             nn.ReLU(),
-            nn.MaxPool1d(4),
+            # nn.MaxPool1d(4),
             nn.Linear(in_features=chunk_size//800, out_features=n_output),
             nn.Flatten(1, 2),
         )
