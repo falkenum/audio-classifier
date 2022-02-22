@@ -17,7 +17,7 @@ PREFIX_DIR = os.path.dirname(__file__)
 PICKLE_DIR = f"{PREFIX_DIR}/pickle/"
 MUSIC_SOUNDS_DIR = f"{PREFIX_DIR}/music-sounds/"
 BIRD_SOUNDS_DIR = f"{PREFIX_DIR}/bird-sounds/"
-FFT_SIZE = 1024
+FFT_SIZE = 4096
 NUM_MELS = 128
 FREESOUND_AUTH_PATH = f"{PREFIX_DIR}/freesound_auth.json"
 DATA_PATH = f"{PICKLE_DIR}data.pickle"
@@ -48,11 +48,15 @@ class BirdModel(torch.nn.Module):
     def __init__(self, n_input, n_output) -> None:
         super().__init__()
         # self.lstm = nn.LSTM(input_size=1, hidden_size=64, num_layers=1)
-        self.lstm = nn.LSTMCell(input_size=1, hidden_size=64)
-        self.linear = nn.Linear(in_features=64, out_features=n_output)
-        # self.flatten = nn.Flatten(0, 1)
+        self.hidden_size = 64
 
-    def forward(self, sound_list):
+        self.lstm = nn.LSTMCell(input_size=NUM_MELS, hidden_size=self.hidden_size)
+        self.layers = nn.Sequential(
+            nn.Linear(in_features=self.hidden_size, out_features=n_output),
+        )
+
+
+    def forward(self, spec_list):
         # print(x.shape)
         # for layer in self.layers:
         #     x = layer(x)
@@ -63,26 +67,23 @@ class BirdModel(torch.nn.Module):
 
         # x = x.view(1, -1, 1)
         # sound_list.sort(key=lambda sound: len(sound), reverse=True)
-        # sounds = nn.utils.rnn.pad_sequence(sound_list, padding_value=0.0, batch_first=True).cuda(0)
+        specs = nn.utils.rnn.pad_sequence(spec_list, padding_value=-100.0, batch_first=True).cuda(0)
         # packed_sounds = nn.utils.rnn.pack_padded_sequence(sounds, [len(sound) for sound in sound_list], enforce_sorted=True).cuda(0)
-        assert(len(sound_list) == 1)
-        sound = sound_list[0]
+        # specs = torch.stack(tuple(spec_list), dim=0).cuda(0)
 
         # h = nvmlDeviceGetHandleByIndex(0)
         # info = nvmlDeviceGetMemoryInfo(h)
         # print(f'total    : {info.total}')
         # print(f'free     : {info.free}')
         # print(f'used     : {info.used}')
-        batch_size = 32000
-        hn = torch.zeros((batch_size, 64)).cuda(0)
-        cn = torch.zeros((batch_size, 64)).cuda(0)
+        # batch_size = 32000
+        hn = torch.zeros((len(spec_list), self.hidden_size)).cuda(0)
+        cn = torch.zeros((len(spec_list), self.hidden_size)).cuda(0)
 
-        offset = 0
-        while offset + batch_size < batch_size*30:
-            hn, cn = self.lstm(sound[offset:offset+batch_size, None], (hn, cn))
-            offset += batch_size
+        for hop in specs.split(1, dim=1):
+            hn, cn = self.lstm(hop.view(-1, NUM_MELS), (hn, cn))
         
-        return self.linear(hn)
+        return self.layers(hn)
 
 
 class BirdsDataset(IterableDataset):
@@ -96,9 +97,9 @@ class BirdsDataset(IterableDataset):
         self.sound_list = []
         query_result = list(self.db.get_bird_sounds(limit=self.num_sounds, shuffle=True))
         # self.spectrogram = torchaudio.transforms.Spectrogram(FFT_SIZE, FFT_SIZE//2+1, FFT_SIZE//8, power = 2)
-        # self.spectrogram = torchaudio.transforms.MelSpectrogram(sample_rate=32000, n_mels=NUM_MELS, n_fft=FFT_SIZE, win_length=FFT_SIZE//2+1, hop_length=FFT_SIZE//8, power = 2)
+        self.spectrogram = torchaudio.transforms.MelSpectrogram(sample_rate=32000, n_mels=NUM_MELS, n_fft=FFT_SIZE, win_length=FFT_SIZE//2+1, hop_length=FFT_SIZE//8, power = 2)
         # self.mfcc = torchaudio.transforms.MFCC(sample_rate=32000)
-        # self.to_db = torchaudio.transforms.AmplitudeToDB()
+        self.to_db = torchaudio.transforms.AmplitudeToDB()
 
         bird_names = set()
         for bird_name, filename in query_result:
@@ -123,7 +124,7 @@ class BirdsDataset(IterableDataset):
         if len(self.sound_queue) == 0:
             raise StopIteration
 
-        sound_list = []
+        spec_list = []
         label_list = []
         num_batches = 0
 
@@ -133,13 +134,9 @@ class BirdsDataset(IterableDataset):
 
             assert(fs == 32000)
             assert(sound.shape[0] == 1)
-            # sound = sound.T
-
-            # if len(sound) > max_len:
-            #     max_len = len(sound)
-
-            sound_list.append(sound[0].cuda(0))
-            # sound_length_list.append(len(sound))
+            spec = self.to_db(self.spectrogram(sound))
+            
+            spec_list.append(spec[0].T.cuda(0))
             label_list.append(label)
 
             num_batches += 1
@@ -148,5 +145,5 @@ class BirdsDataset(IterableDataset):
         
         labels = torch.tensor(label_list).cuda(0)
 
-        return sound_list, labels
+        return spec_list, labels
     

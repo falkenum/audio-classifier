@@ -13,12 +13,11 @@ matplotlib.use("WebAgg")
 db = AudioDatabase()
 import sys
 
-num_sounds = 100
-chunk_size = 20*32000
+num_sounds = 2000
 num_feature_labels = db.get_num_birds()
-learning_rate = 5e-3
-batch_size = 1
-epochs = 20
+learning_rate = 1e-2
+batch_size = 5
+epochs = 100
 dataset_type = BirdsDataset
 
 train_sounds, test_sounds = (floor(num_sounds * 0.9), ceil(num_sounds * 0.1))
@@ -36,7 +35,7 @@ def train_loop(dataloader, model, loss_fn, optimizer):
         loss.backward()
         optimizer.step()
 
-        if batch % 1 == 0:
+        if batch % 100 == 0:
             current = batch * len(X)
             print(f"loss: {loss.item():>7f}  [{current:>5d}]")
     
@@ -50,8 +49,9 @@ def test_loop(dataloader, model, loss_fn):
             pred = model(X)
             test_loss += loss_fn(pred, y).item()
 
-            for row_idx, pred_val in enumerate(pred):
-                correct += y[row_idx] == pred_val
+            pred_indices = torch.argmax(pred, dim=1)
+            for row_idx, pred_idx in enumerate(pred_indices):
+                correct += y[row_idx].item() == pred_idx.item()
 
             size += len(X)
             num_batches += 1
