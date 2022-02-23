@@ -18,7 +18,7 @@ PICKLE_DIR = f"{PREFIX_DIR}/pickle/"
 MUSIC_SOUNDS_DIR = f"{PREFIX_DIR}/music-sounds/"
 BIRD_SOUNDS_DIR = f"{PREFIX_DIR}/bird-sounds/"
 FFT_SIZE = 4096
-NUM_MELS = 128
+NUM_MELS = 512
 FREESOUND_AUTH_PATH = f"{PREFIX_DIR}/freesound_auth.json"
 DATA_PATH = f"{PICKLE_DIR}data.pickle"
 # TAGS_PATH = f"{PICKLE_DIR}tags.pickle"
@@ -52,6 +52,7 @@ class BirdModel(torch.nn.Module):
 
         self.lstm = nn.LSTMCell(input_size=NUM_MELS, hidden_size=self.hidden_size)
         self.layers = nn.Sequential(
+            nn.ReLU(),
             nn.Linear(in_features=self.hidden_size, out_features=n_output),
         )
 
@@ -97,7 +98,7 @@ class BirdsDataset(IterableDataset):
         self.sound_list = []
         query_result = list(self.db.get_bird_sounds(limit=self.num_sounds, shuffle=True))
         # self.spectrogram = torchaudio.transforms.Spectrogram(FFT_SIZE, FFT_SIZE//2+1, FFT_SIZE//8, power = 2)
-        self.spectrogram = torchaudio.transforms.MelSpectrogram(sample_rate=32000, n_mels=NUM_MELS, n_fft=FFT_SIZE, win_length=FFT_SIZE//2+1, hop_length=FFT_SIZE//8, power = 2)
+        self.spectrogram = torchaudio.transforms.MelSpectrogram(sample_rate=32000, n_mels=NUM_MELS, n_fft=FFT_SIZE, win_length=FFT_SIZE//2+1, hop_length=FFT_SIZE//4, power = 2)
         # self.mfcc = torchaudio.transforms.MFCC(sample_rate=32000)
         self.to_db = torchaudio.transforms.AmplitudeToDB()
 

@@ -16,7 +16,7 @@ import sys
 num_sounds = 2000
 num_feature_labels = db.get_num_birds()
 learning_rate = 1e-2
-batch_size = 5
+batch_size = 20
 epochs = 100
 dataset_type = BirdsDataset
 
@@ -35,9 +35,9 @@ def train_loop(dataloader, model, loss_fn, optimizer):
         loss.backward()
         optimizer.step()
 
-        if batch % 100 == 0:
+        if batch % 10 == 0:
             current = batch * len(X)
-            print(f"loss: {loss.item():>7f}  [{current:>5d}]")
+            print(f"loss: {loss.item():>7f}  [{current:>5d}]", flush=True)
     
 def test_loop(dataloader, model, loss_fn):
     size = 0
@@ -59,8 +59,7 @@ def test_loop(dataloader, model, loss_fn):
     avg_loss = test_loss / num_batches
     accuracy = correct / size
     print(f"Predicition accuracy: {(100*accuracy):>0.1f}% ({correct}/{size})")
-    print(f"Avg loss: {avg_loss:>0.4f}")
-    print()
+    print(f"Avg loss: {avg_loss:>0.4f}\n", flush=True)
 
 
 loss_fn = torch.nn.CrossEntropyLoss()
