@@ -3,7 +3,7 @@ import freesound
 import json
 import os
 from db import AudioDatabase
-from common import FREESOUND_AUTH_PATH, MUSIC_SOUNDS_DIR
+from common import FREESOUND_AUTH_PATH, CAT_DOG_SOUNDS_DIR
 
 client = freesound.FreesoundClient()
 with open(FREESOUND_AUTH_PATH) as f:
@@ -25,11 +25,11 @@ for tag in query_tags:
 
         for sound in sounds:
             filename = f"{sound.id}.{extension}"
-            filepath = f"{MUSIC_SOUNDS_DIR}/{filename}"
+            filepath = f"{CAT_DOG_SOUNDS_DIR}/{filename}"
             if not os.path.exists(filepath):
                 while True:
                     try:
-                        sound.retrieve(MUSIC_SOUNDS_DIR, name=filename)
+                        sound.retrieve(CAT_DOG_SOUNDS_DIR, name=filename)
                         break
                     except ContentTooShortError:
                         print("download failed, trying again")

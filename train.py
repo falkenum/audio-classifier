@@ -13,18 +13,18 @@ matplotlib.use("WebAgg")
 db = AudioDatabase()
 import sys
 
-num_sounds = 2000
-num_feature_labels = db.get_num_birds()
-learning_rate = 1e-2
-batch_size = 20
+num_sounds = 1000
+learning_rate = 1e-3
+batch_size = 5
 epochs = 100
-dataset_type = BirdsDataset
 
 train_sounds, test_sounds = (floor(num_sounds * 0.9), ceil(num_sounds * 0.1))
-train_data = dataset_type(train_sounds, batch_size, shuffle=True)
-test_data = dataset_type(test_sounds, batch_size, shuffle=True)
 
-model = BirdModel(n_input=1, n_output=num_feature_labels).cuda(0)
+# TODO ensure no overlap between train and test
+train_data = AudioDataset(CAT_DOG_SOUNDS_DIR, train_sounds, batch_size, shuffle=True)
+test_data = AudioDataset(CAT_DOG_SOUNDS_DIR, test_sounds, batch_size, shuffle=True)
+
+model = AudioModel(n_input=train_data.num_input_features(), n_output=train_data.num_output_features()).cuda(0)
 
 def train_loop(dataloader, model, loss_fn, optimizer):
     for batch, (X, y) in enumerate(dataloader):
@@ -62,7 +62,7 @@ def test_loop(dataloader, model, loss_fn):
     print(f"Avg loss: {avg_loss:>0.4f}\n", flush=True)
 
 
-loss_fn = torch.nn.CrossEntropyLoss()
+loss_fn = torch.nn.NLLLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
 # optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, weight_decay=5e-4)
 
