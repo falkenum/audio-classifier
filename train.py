@@ -13,7 +13,7 @@ matplotlib.use("WebAgg")
 db = AudioDatabase()
 import sys
 
-num_sounds = 1000
+num_sounds = 280
 learning_rate = 1e-3
 batch_size = 5
 epochs = 100
@@ -24,7 +24,7 @@ train_sounds, test_sounds = (floor(num_sounds * 0.9), ceil(num_sounds * 0.1))
 train_data = AudioDataset(CAT_DOG_SOUNDS_DIR, train_sounds, batch_size, shuffle=True)
 test_data = AudioDataset(CAT_DOG_SOUNDS_DIR, test_sounds, batch_size, shuffle=True)
 
-model = AudioModel(n_input=train_data.num_input_features(), n_output=train_data.num_output_features()).cuda(0)
+model = AudioModel(output_labels=train_data.num_output_features()).cuda(0)
 
 def train_loop(dataloader, model, loss_fn, optimizer):
     for batch, (X, y) in enumerate(dataloader):
