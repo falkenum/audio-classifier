@@ -129,26 +129,13 @@ class AudioDataset(IterableDataset):
 
         for label, filepath in complete_labelled_filepaths[:num_sounds]:
             label = torch.tensor(self.label_to_feature[label])
-            sound_data, fs = torchaudio.load(filepath)
-
-            # length of first channel (should be the same for all channels)
-            sound_len = len(sound_data[0])
-            
-            self.labelled_filepaths.append((label, filepath, sound_len))
-        
-        # arrange chosen sounds by length of the sound to help with padding later
-        def sort_key(sound):
-            _, _, sound_len = sound
-            return sound_len
-        
-        # sort such that the longest files are first
-        self.labelled_filepaths.sort(key=sort_key)
+            self.labelled_filepaths.append((label, filepath))
     
     def num_output_features(self):
         return len(self.label_to_feature)
 
     def __getitem__(self, idx):
-        label, filepath, _ = self.labelled_filepaths[idx]
+        label, filepath = self.labelled_filepaths[idx]
         sound, fs = torchaudio.load(filepath)
 
         resampler = torchaudio.transforms.Resample(fs, SAMPLE_RATE)
