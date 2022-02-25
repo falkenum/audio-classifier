@@ -37,20 +37,23 @@ if not os.path.exists(PICKLE_DIR):
 class ConvModel(torch.nn.Module):
     def __init__(self, output_labels) -> None:
         super().__init__()
-        self.conv_chunk_width = 1024 # about 12 seconds per chunk
+        self.conv_chunk_width = 512 # about 12 seconds per chunk
 
         self.layers = nn.Sequential(
             nn.Conv2d(in_channels=1, out_channels=8, kernel_size=5, padding='same'),
-            nn.MaxPool2d((8, 8), ceil_mode=True), # batchx1x128x128
             nn.ReLU(),
-            nn.Conv2d(in_channels=8, out_channels=8, kernel_size=3, padding='same'),
-            nn.MaxPool2d((4, 4)), #batchx1x32x32
+            nn.BatchNorm2d(8),
+            nn.MaxPool2d((8, 4), ceil_mode=True), # batchx1x128x128
+            nn.Conv2d(in_channels=8, out_channels=16, kernel_size=3, padding='same'),
             nn.ReLU(),
-            nn.Conv2d(in_channels=8, out_channels=1, kernel_size=3, padding='same'),
-            nn.MaxPool2d((4, 4)), #batchx1x8x8
+            nn.BatchNorm2d(16),
+            nn.MaxPool2d((8, 8)), #batchx16x8x8
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding='same'),
             nn.ReLU(),
-            nn.Flatten(1, 3), #batchx64
-            nn.Linear(in_features=64, out_features=output_labels),
+            nn.BatchNorm2d(32),
+            nn.MaxPool2d((8, 8)), #batchx32x2x2
+            nn.Flatten(1, 3), #batchx128
+            nn.Linear(in_features=128, out_features=output_labels),
         )
 
     def forward(self, chunk):
@@ -60,53 +63,54 @@ class ConvLSTMModel(torch.nn.Module):
     def __init__(self, output_labels) -> None:
         super().__init__()
         self.lstm_hidden_size = 64
-        self.conv_chunk_width = 8 # 8 hops of len 512 per hop, corresponds to 4096 raw samples per chunk
-        # self.conv_chunk_height = NUM_INPUT_FEATURES - 1 # make power of 2
+        self.lstm_input_channels = 128
 
-        self.lstm_input_channels = 32
+        self.conv_chunk_width = 1024 # about 6 seconds per chunk
 
-        # going from 1 by conv_chunk_height by conv_chunk_width to lstm_input_channels by 1
         self.conv_layers = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=32, kernel_size=5, padding='same'),
-            nn.MaxPool2d((2, 2)), # 32x512x4
+            nn.Conv2d(in_channels=1, out_channels=8, kernel_size=5, padding='same'),
             nn.ReLU(),
-            nn.Conv2d(in_channels=32, out_channels=16, kernel_size=3, padding='same'),
-            nn.MaxPool2d((2, 2)), # 16x256x2
+            nn.BatchNorm2d(8),
+            nn.MaxPool2d((8, 8), ceil_mode=True), # batchx1x128x128
+            nn.Conv2d(in_channels=8, out_channels=16, kernel_size=3, padding='same'),
             nn.ReLU(),
-            nn.Conv2d(in_channels=16, out_channels=4, kernel_size=3, padding='same'),
-            nn.MaxPool2d((2, 2)), # 4x128x1
+            nn.BatchNorm2d(16),
+            nn.MaxPool2d((8, 8)), #batchx16x8x8
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding='same'),
             nn.ReLU(),
-            nn.Conv2d(in_channels=4, out_channels=1, kernel_size=3, padding='same'),
-            nn.MaxPool2d((4, 1)), # 1x32x1
-            nn.ReLU(),
-            nn.Flatten(1, 3), # 32
-            # nn.Linear(in_features=32, out_features=32),
+            nn.BatchNorm2d(32),
+            nn.MaxPool2d((8, 8)), #batchx32x2x2
+            nn.Flatten(1, 3), #batchx128
+            # nn.Linear(in_features=128, out_features=output_labels),
         )
 
         self.lstm = nn.LSTMCell(input_size=self.lstm_input_channels, hidden_size=self.lstm_hidden_size)
+
         self.final_layers = nn.Sequential(
             nn.ReLU(),
             nn.Linear(in_features=self.lstm_hidden_size, out_features=output_labels),
         )
 
+        self.hn = None
+        self.cn = None
 
-    def forward(self, specs):
-        batch_size = len(specs)
 
-        chunks = torch.split(specs, self.conv_chunk_width, dim=3)
-        hn = torch.zeros((batch_size, self.lstm_hidden_size)).cuda(0)
-        cn = torch.zeros((batch_size, self.lstm_hidden_size)).cuda(0)
+    def forward(self, chunk):
+        batch_size = len(chunk)
+
+        # add channel dimension back in
+        chunk = chunk[:, None, :, :]
+
+        self.hn = torch.zeros((batch_size, self.lstm_hidden_size)).cuda(0)
+        self.cn = torch.zeros((batch_size, self.lstm_hidden_size)).cuda(0)
 
         # last dimension will be short probably
-        for chunk in chunks[:-1]:
-            # indexing to form power of 2 height
-            chunk = chunk[:, :, 1:, :].cuda(0)
-            hn, cn = self.lstm(self.conv_layers(chunk), (hn, cn))
+        self.hn, self.cn = self.lstm(self.conv_layers(chunk), (self.hn, self.cn))
 
-        return self.final_layers(hn)
+        return self.final_layers(self.hn)
 
 class AudioDataset(IterableDataset):
-    def __init__(self, sounds_dirname, num_sounds, shuffle = False) -> None:
+    def __init__(self, sounds_dirname, num_sounds, shuffle = False, sorted = False) -> None:
         super().__init__()
         self.db = AudioDatabase()
         self.labelled_filepaths = []
@@ -130,6 +134,15 @@ class AudioDataset(IterableDataset):
         for label, filepath in complete_labelled_filepaths[:num_sounds]:
             label = torch.tensor(self.label_to_feature[label])
             self.labelled_filepaths.append((label, filepath))
+        
+        def sort_key(sound):
+            label, filepath = sound
+            sound_data, fs = torchaudio.load(filepath)
+
+            return sound_data.shape[1]
+        
+        if sorted:
+            self.labelled_filepaths.sort(key=sort_key, reverse=True)
     
     def num_output_features(self):
         return len(self.label_to_feature)
