@@ -13,11 +13,11 @@ matplotlib.use("WebAgg")
 db = AudioDatabase()
 import sys
 
-num_sounds = 280
+num_sounds = 2000
 learning_rate = 1e-3
-batch_size = 20
-epochs = 50
-SOUND_DIR = CAT_DOG_SOUNDS_DIR
+chunks_per_batch = 10 # chunk size is 12 seconds, batch is 2 min 
+epochs = 20
+SOUND_DIR = BIRD_SOUNDS_DIR
 MODE = "conv"
 
 
@@ -33,32 +33,41 @@ if MODE == "conv":
 
 class AudioChunker(IterableDataset):
     def __init__(self, inner_dataset) -> None:
-        self.inner_data_list = list(inner_dataset)
-        self.inner_data_queue = deque()
+        self.inner_dataset = inner_dataset
         self.chunk_queue = deque()
         self.next_label = None
+        self.next_sound_idx = None
+        self.spectrogram = torchaudio.transforms.Spectrogram(n_fft=FFT_SIZE, win_length=FFT_SIZE//2+1, center=False)
+        self.to_db = torchaudio.transforms.AmplitudeToDB()
 
     def __iter__(self):
-        self.inner_data_queue = deque()
-        self.inner_data_queue.extend(self.inner_data_list)
+        self.chunk_queue = deque()
+        self.next_sound_idx = 0
+        # self.inner_data_queue.extend(self.inner_data_list)
         return self
     
     def __next__(self):
         if len(self.chunk_queue) == 0:
-            if len(self.inner_data_queue) == 0:
-                raise StopIteration
-            sound, label = self.inner_data_queue.pop()
-            self.next_label = label
+            while True:
+                if self.next_sound_idx == len(self.inner_dataset):
+                    raise StopIteration
+                sound, label = self.inner_dataset[self.next_sound_idx]
+                self.next_label = label
+                self.next_sound_idx += 1
 
-            data_chunks = torch.split(sound, model.conv_chunk_width, dim=1)
-            # don't include short chunk
-            self.chunk_queue.extend(data_chunks[:-1])
+                sound = self.to_db(self.spectrogram(sound))
+                data_chunks = torch.split(sound, model.conv_chunk_width, dim=2)
+                # don't include short chunk
+                self.chunk_queue.extend(data_chunks[:-1])
+
+                if len(self.chunk_queue) > 0:
+                    break
         
-        return self.chunk_queue.pop(), self.next_label
+        return self.chunk_queue.pop().cuda(0), self.next_label.cuda(0)
 
 if MODE == "conv":
-    train_data = DataLoader(AudioChunker(train_data), batch_size)
-    test_data = DataLoader(AudioChunker(test_data), batch_size)
+    train_data = DataLoader(AudioChunker(train_data), chunks_per_batch)
+    test_data = DataLoader(AudioChunker(test_data), chunks_per_batch)
 
 def train_loop(dataset, model, loss_fn, optimizer):
     # chunk_flattener = nn.Flatten(2, 3)

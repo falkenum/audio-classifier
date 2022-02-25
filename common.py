@@ -37,19 +37,20 @@ if not os.path.exists(PICKLE_DIR):
 class ConvModel(torch.nn.Module):
     def __init__(self, output_labels) -> None:
         super().__init__()
-        self.conv_chunk_width = 2**15
+        self.conv_chunk_width = 1024 # about 12 seconds per chunk
 
         self.layers = nn.Sequential(
-            torchaudio.transforms.Spectrogram(n_fft=FFT_SIZE, win_length=FFT_SIZE//2+1, center=False),
-            torchaudio.transforms.AmplitudeToDB(),
             nn.Conv2d(in_channels=1, out_channels=8, kernel_size=5, padding='same'),
-            nn.MaxPool2d((8, 64), ceil_mode=True),
+            nn.MaxPool2d((8, 8), ceil_mode=True), # batchx1x128x128
+            nn.ReLU(),
+            nn.Conv2d(in_channels=8, out_channels=8, kernel_size=3, padding='same'),
+            nn.MaxPool2d((4, 4)), #batchx1x32x32
             nn.ReLU(),
             nn.Conv2d(in_channels=8, out_channels=1, kernel_size=3, padding='same'),
-            nn.MaxPool2d((4, 1)),
+            nn.MaxPool2d((4, 4)), #batchx1x8x8
             nn.ReLU(),
-            nn.Flatten(1, 3), # 32
-            nn.Linear(in_features=32, out_features=output_labels),
+            nn.Flatten(1, 3), #batchx64
+            nn.Linear(in_features=64, out_features=output_labels),
         )
 
     def forward(self, chunk):
@@ -153,7 +154,7 @@ class AudioDataset(IterableDataset):
         resampler = torchaudio.transforms.Resample(fs, SAMPLE_RATE)
         sound = resampler(sound)
 
-        return sound.cuda(0), label.cuda(0)
+        return sound, label
 
     def __len__(self):
         return len(self.labelled_filepaths)
