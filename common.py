@@ -37,21 +37,21 @@ if not os.path.exists(PICKLE_DIR):
 class ConvModel(torch.nn.Module):
     def __init__(self, output_labels) -> None:
         super().__init__()
-        self.conv_chunk_width = 512 # about 12 seconds per chunk
+        self.conv_chunk_width = 4096 # about 12 seconds per chunk
 
         self.layers = nn.Sequential(
             nn.Conv2d(in_channels=1, out_channels=8, kernel_size=5, padding='same'),
             nn.ReLU(),
             nn.BatchNorm2d(8),
-            nn.MaxPool2d((8, 4), ceil_mode=True), # batchx1x128x128
+            nn.MaxPool2d((8, 8), ceil_mode=True), # batchx1x128x128
             nn.Conv2d(in_channels=8, out_channels=16, kernel_size=3, padding='same'),
             nn.ReLU(),
             nn.BatchNorm2d(16),
-            nn.MaxPool2d((8, 8)), #batchx16x8x8
+            nn.MaxPool2d((8, 16)), #batchx16x8x8
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding='same'),
             nn.ReLU(),
             nn.BatchNorm2d(32),
-            nn.MaxPool2d((8, 8)), #batchx32x2x2
+            nn.MaxPool2d((8, 16)), #batchx32x2x2
             nn.Flatten(1, 3), #batchx128
             nn.Linear(in_features=128, out_features=output_labels),
         )

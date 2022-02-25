@@ -15,17 +15,17 @@ import sys
 
 num_sounds = 200
 learning_rate = 2e-3
-chunks_per_batch = 40
-sounds_per_batch = 10
+# chunks_per_batch = 5
+sounds_per_batch = 5
 epochs = 20
 SOUND_DIR = BIRD_SOUNDS_DIR
 MODE = "conv"
 
-sorted = False
-if MODE == "convlstm":
-    sorted = True
+# sorted = False
+# if MODE == "convlstm":
+#     sorted = True
 
-sounds = AudioDataset(SOUND_DIR, num_sounds, shuffle=True, sorted=sorted)
+sounds = AudioDataset(SOUND_DIR, num_sounds, shuffle=True, sorted=True)
 train_sounds, test_sounds = (floor(num_sounds * 0.9), ceil(num_sounds * 0.1))
 train_data, test_data = random_split(sounds, (train_sounds, test_sounds))
 
@@ -36,55 +36,12 @@ if MODE == "conv":
 elif MODE == "convlstm":
     model = ConvLSTMModel(output_labels=sounds.num_output_features()).cuda(0)
 
-class AudioChunker(IterableDataset):
-    def __init__(self, inner_dataset) -> None:
-        self.inner_dataset = inner_dataset
-        self.chunk_queue = deque()
-        self.next_label = None
-        self.next_sound_idx = None
-        self.spectrogram = torchaudio.transforms.Spectrogram(n_fft=FFT_SIZE, win_length=FFT_SIZE//2+1, center=False)
-        self.to_db = torchaudio.transforms.AmplitudeToDB()
-
-    def __iter__(self):
-        self.chunk_queue = deque()
-        self.next_sound_idx = 0
-        # self.inner_data_queue.extend(self.inner_data_list)
-        return self
-    
-    def __next__(self):
-        if len(self.chunk_queue) == 0:
-            if self.next_sound_idx == len(self.inner_dataset):
-                raise StopIteration
-            sound, label = self.inner_dataset[self.next_sound_idx]
-            self.next_label = label
-            self.next_sound_idx += 1
-
-            sound = self.to_db(self.spectrogram(sound))
-            data_chunks = torch.split(sound, model.conv_chunk_width, dim=2)
-
-            short_chunk = data_chunks[-1]
-            if short_chunk.shape[2] < model.conv_chunk_width:
-                new_dim = short_chunk.shape[0], short_chunk.shape[1], model.conv_chunk_width - short_chunk.shape[2]
-                new_values = torch.full(new_dim, -100.0)
-
-                # pad the short chunk
-                data_chunks_list = []
-                data_chunks_list.extend(data_chunks[:-1])
-                data_chunks_list.append(torch.cat((short_chunk, new_values), dim=2))
-                data_chunks = tuple(data_chunks_list)
-
-            self.chunk_queue.extend(data_chunks)
-        
-        return self.chunk_queue.pop().cuda(0), self.next_label.cuda(0)
-
-class ConvLSTMLoader:
+class AudioLoader:
     def __init__(self, inner_dataset) -> None:
         self.inner_dataset = inner_dataset
         self.chunk_queue = None
         self.next_labels = None
         self.next_sound_idx = None
-        self.spectrogram = torchaudio.transforms.Spectrogram(n_fft=FFT_SIZE, win_length=FFT_SIZE//2+1)
-        self.to_db = torchaudio.transforms.AmplitudeToDB()
 
     def __iter__(self):
         self.chunk_queue = deque()
@@ -92,9 +49,8 @@ class ConvLSTMLoader:
         return self
     
     def __next__(self):
-        new_sounds = False
         if len(self.chunk_queue) == 0:
-            new_sounds = True
+
             sound_batch_list = []
             sound_label_list = []
             for _ in range(sounds_per_batch):
@@ -108,41 +64,39 @@ class ConvLSTMLoader:
                 sound_batch_list.append(sound[0])
 
             sound_batch = torch.nn.utils.rnn.pad_sequence(sound_batch_list, batch_first=True)
-            sound_batch = self.to_db(self.spectrogram(sound_batch))
+
+            win_length = FFT_SIZE // 2
+            hop_length = win_length // 2
+            window = torch.hann_window(win_length)
+
+            # pad such that the output chunks are a multiple of the chunk size
+            sound_batch = torch.stft(sound_batch, n_fft=FFT_SIZE, win_length=win_length, 
+                hop_length=hop_length, window=window, normalized=True, return_complex=True).abs()
+
+            output_len = sound_batch.shape[2]
+            output_pad = model.conv_chunk_width - output_len % model.conv_chunk_width
+            sound_batch = nn.functional.pad(sound_batch, (0, output_pad), value=0.0)
 
             data_chunks = torch.split(sound_batch, model.conv_chunk_width, dim=2)
 
-            short_chunk = data_chunks[-1]
-            if short_chunk.shape[2] < model.conv_chunk_width:
-                new_dim = short_chunk.shape[0], short_chunk.shape[1], model.conv_chunk_width - short_chunk.shape[2]
-                new_values = torch.full(new_dim, -100.0)
-
-                # pad the short chunk
-                data_chunks_list = []
-                data_chunks_list.extend(data_chunks[:-1])
-                data_chunks_list.append(torch.cat((short_chunk, new_values), dim=2))
-                data_chunks = tuple(data_chunks_list)
-
+            # there's a short chunk at the end that we don't want, TODO fix this
             self.chunk_queue.extend(data_chunks)
-
             self.next_labels = torch.tensor(sound_label_list)
-        
-        return self.chunk_queue.pop().cuda(0), self.next_labels.cuda(0)
-            
 
-if MODE == "conv":
-    train_data = DataLoader(AudioChunker(train_data), chunks_per_batch)
-    test_data = DataLoader(AudioChunker(test_data), chunks_per_batch)
-elif MODE == "convlstm":
-    train_data = ConvLSTMLoader(train_data)
-    test_data = ConvLSTMLoader(test_data)
+        # adding channel dim back in
+        next_chunk = self.chunk_queue.pop()[:, None, :, :]
+        return next_chunk.cuda(0), self.next_labels.cuda(0)
+            
+train_data = AudioLoader(train_data)
+test_data = AudioLoader(test_data)
 
 def train_loop(dataset, model, loss_fn, optimizer):
-    # chunk_flattener = nn.Flatten(2, 3)
+    losses=[]
 
     for batch, (X, y) in enumerate(dataset):
         pred = model(X)
         loss = loss_fn(pred, y)
+        losses.append(loss.cpu().detach().numpy())
 
         optimizer.zero_grad()
         loss.backward()
@@ -151,11 +105,16 @@ def train_loop(dataset, model, loss_fn, optimizer):
         if batch % 10 == 0:
             current = batch * len(X)
             print(f"loss: {loss.item():>7f}  [{current:>5d}]", flush=True)
+
+    # plt.plot(losses)
+    # plt.show()
     
 def test_loop(dataset, model, loss_fn):
     size = 0
     num_batches = 0
     test_loss, correct = 0, 0
+
+    test_losses = []
 
     with torch.no_grad():
         for X, y in dataset:
@@ -173,7 +132,6 @@ def test_loop(dataset, model, loss_fn):
     accuracy = correct / size
     print(f"Predicition accuracy: {(100*accuracy):>0.1f}% ({correct}/{size})")
     print(f"Avg loss: {avg_loss:>0.4f}\n", flush=True)
-
 
 loss_fn = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=5e-4)
