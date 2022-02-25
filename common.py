@@ -34,7 +34,28 @@ MODEL_PATH = f"{PICKLE_DIR}model.pickle"
 if not os.path.exists(PICKLE_DIR):
     os.makedirs(PICKLE_DIR)
 
-class AudioModel(torch.nn.Module):
+class ConvModel(torch.nn.Module):
+    def __init__(self, output_labels) -> None:
+        super().__init__()
+        self.conv_chunk_width = 2**15
+
+        self.layers = nn.Sequential(
+            torchaudio.transforms.Spectrogram(n_fft=FFT_SIZE, win_length=FFT_SIZE//2+1, center=False),
+            torchaudio.transforms.AmplitudeToDB(),
+            nn.Conv2d(in_channels=1, out_channels=8, kernel_size=5, padding='same'),
+            nn.MaxPool2d((8, 64), ceil_mode=True),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=8, out_channels=1, kernel_size=3, padding='same'),
+            nn.MaxPool2d((4, 1)),
+            nn.ReLU(),
+            nn.Flatten(1, 3), # 32
+            nn.Linear(in_features=32, out_features=output_labels),
+        )
+
+    def forward(self, chunk):
+        return self.layers(chunk)
+
+class ConvLSTMModel(torch.nn.Module):
     def __init__(self, output_labels) -> None:
         super().__init__()
         self.lstm_hidden_size = 64
@@ -57,14 +78,14 @@ class AudioModel(torch.nn.Module):
             nn.Conv2d(in_channels=4, out_channels=1, kernel_size=3, padding='same'),
             nn.MaxPool2d((4, 1)), # 1x32x1
             nn.ReLU(),
-            nn.Flatten(1, 3), # 32x1
+            nn.Flatten(1, 3), # 32
+            # nn.Linear(in_features=32, out_features=32),
         )
 
         self.lstm = nn.LSTMCell(input_size=self.lstm_input_channels, hidden_size=self.lstm_hidden_size)
         self.final_layers = nn.Sequential(
             nn.ReLU(),
             nn.Linear(in_features=self.lstm_hidden_size, out_features=output_labels),
-            nn.LogSoftmax(dim=1)
         )
 
 
@@ -75,27 +96,18 @@ class AudioModel(torch.nn.Module):
         hn = torch.zeros((batch_size, self.lstm_hidden_size)).cuda(0)
         cn = torch.zeros((batch_size, self.lstm_hidden_size)).cuda(0)
 
-        post_conv_chunks = []
-
         # last dimension will be short probably
         for chunk in chunks[:-1]:
             # indexing to form power of 2 height
             chunk = chunk[:, :, 1:, :].cuda(0)
-            post_conv_chunks.append(self.conv_layers(chunk)) # batch_sizex32x1
-        
-        # post_conv = torch.stack(post_conv_chunks, dim=2)
+            hn, cn = self.lstm(self.conv_layers(chunk), (hn, cn))
 
-        for chunk in post_conv_chunks:
-            hn, cn = self.lstm(chunk, (hn, cn))
-        
         return self.final_layers(hn)
 
 class AudioDataset(IterableDataset):
-    def __init__(self, sounds_dirname, num_sounds, batch_size, shuffle = False) -> None:
+    def __init__(self, sounds_dirname, num_sounds, shuffle = False) -> None:
         super().__init__()
-        self.batch_size = batch_size
         self.db = AudioDatabase()
-        self.sound_queue = None
         self.labelled_filepaths = []
         # query_result = list(self.db.get_bird_sounds(limit=self.num_sounds, shuffle=True))
         sounds_dir = Path(os.path.join(os.path.dirname(__file__), sounds_dirname))
@@ -109,10 +121,6 @@ class AudioDataset(IterableDataset):
                     complete_labelled_filepaths.append((label_dir.name, str(audio_file)))
 
 
-        self.spectrogram = torchaudio.transforms.Spectrogram(FFT_SIZE, FFT_SIZE//2+1, FFT_SIZE//4, power = 2)
-        # self.spectrogram = torchaudio.transforms.MelSpectrogram(sample_rate=32000, n_mels=NUM_MELS, n_fft=FFT_SIZE, win_length=FFT_SIZE//2+1, hop_length=FFT_SIZE//8, power = 2)
-        # self.mfcc = torchaudio.transforms.MFCC(sample_rate=32000)
-        self.to_db = torchaudio.transforms.AmplitudeToDB()
         self.label_to_feature = {label: idx for idx, label in enumerate(label_names)}
 
         if shuffle:
@@ -120,15 +128,17 @@ class AudioDataset(IterableDataset):
 
         for label, filepath in complete_labelled_filepaths[:num_sounds]:
             label = torch.tensor(self.label_to_feature[label])
-            self.labelled_filepaths.append((label, filepath))
-        
-        # arrange chosen sounds by length of the sound to help with padding later
-        def sort_key(sound):
-            label, filepath = sound
             sound_data, fs = torchaudio.load(filepath)
 
             # length of first channel (should be the same for all channels)
-            return len(sound_data[0])
+            sound_len = len(sound_data[0])
+            
+            self.labelled_filepaths.append((label, filepath, sound_len))
+        
+        # arrange chosen sounds by length of the sound to help with padding later
+        def sort_key(sound):
+            _, _, sound_len = sound
+            return sound_len
         
         # sort such that the longest files are first
         self.labelled_filepaths.sort(key=sort_key)
@@ -136,37 +146,14 @@ class AudioDataset(IterableDataset):
     def num_output_features(self):
         return len(self.label_to_feature)
 
-    def __iter__(self):
-        self.sound_queue = deque()
-        self.sound_queue.extend(self.labelled_filepaths)
-        return self
+    def __getitem__(self, idx):
+        label, filepath, _ = self.labelled_filepaths[idx]
+        sound, fs = torchaudio.load(filepath)
 
-    def __next__(self):
-        if len(self.sound_queue) == 0:
-            raise StopIteration
+        resampler = torchaudio.transforms.Resample(fs, SAMPLE_RATE)
+        sound = resampler(sound)
 
-        sound_batch = []
-        label_batch = []
+        return sound.cuda(0), label.cuda(0)
 
-        sound_idx = 0
-
-        while sound_idx < self.batch_size and len(self.sound_queue) > 0:
-            label, filepath = self.sound_queue.pop()
-            sound, fs = torchaudio.load(filepath)
-
-            resampler = torchaudio.transforms.Resample(fs, SAMPLE_RATE)
-            sound = resampler(sound)
-            # only first channel for now
-            sound_batch.append(sound[0])
-            label_batch.append(label)
-
-            sound_idx += 1
-
-        padded_sounds = nn.utils.rnn.pad_sequence(sound_batch, padding_value=0.0, batch_first=True)
-        specs = self.to_db(self.spectrogram(padded_sounds))[:, None, :, :]# add channel dimension back in
-        # packed_sounds = nn.utils.rnn.pack_padded_sequence(sounds, [len(sound) for sound in sound_list], enforce_sorted=True).cuda(0)
-        
-        labels = torch.tensor(label_batch).cuda(0)
-
-        return specs, labels
-    
+    def __len__(self):
+        return len(self.labelled_filepaths)
