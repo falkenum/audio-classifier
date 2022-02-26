@@ -25,11 +25,7 @@ FFT_SIZE = 1024
 NUM_INPUT_FEATURES = FFT_SIZE//2+1
 # NUM_MELS = 2048
 FREESOUND_AUTH_PATH = f"{PREFIX_DIR}/freesound_auth.json"
-DATA_PATH = f"{PICKLE_DIR}data.pickle"
-# TAGS_PATH = f"{PICKLE_DIR}tags.pickle"
-# TAG_BY_FEATURE_PATH = f"{PICKLE_DIR}tag_by_feature.pickle"
 MODEL_PATH = f"{PICKLE_DIR}model.pickle"
-# AC_ANALYSIS_PATH = f"{PICKLE_DIR}ac_analysis.pickle"
 
 if not os.path.exists(PICKLE_DIR):
     os.makedirs(PICKLE_DIR)
@@ -59,58 +55,32 @@ class ConvModel(torch.nn.Module):
     def forward(self, chunk):
         return self.layers(chunk)
 
-class ConvLSTMModel(torch.nn.Module):
+class LSTMModel(torch.nn.Module):
     def __init__(self, output_labels) -> None:
         super().__init__()
         self.lstm_hidden_size = 64
-        self.lstm_input_channels = 128
+        self.lstm_input_channels = FFT_SIZE//2 + 1
+        self.chunk_width = 512
 
-        self.conv_chunk_width = 1024 # about 6 seconds per chunk
-
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=8, kernel_size=5, padding='same'),
-            nn.ReLU(),
-            nn.BatchNorm2d(8),
-            nn.MaxPool2d((8, 8), ceil_mode=True), # batchx1x128x128
-            nn.Conv2d(in_channels=8, out_channels=16, kernel_size=3, padding='same'),
-            nn.ReLU(),
-            nn.BatchNorm2d(16),
-            nn.MaxPool2d((8, 8)), #batchx16x8x8
-            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding='same'),
-            nn.ReLU(),
-            nn.BatchNorm2d(32),
-            nn.MaxPool2d((8, 8)), #batchx32x2x2
-            nn.Flatten(1, 3), #batchx128
-            # nn.Linear(in_features=128, out_features=output_labels),
-        )
-
-        self.lstm = nn.LSTMCell(input_size=self.lstm_input_channels, hidden_size=self.lstm_hidden_size)
+        # self.lstm = nn.LSTMCell(input_size=self.lstm_input_channels, hidden_size=self.lstm_hidden_size)
+        self.lstm = nn.LSTM(input_size=self.lstm_input_channels, hidden_size=self.lstm_hidden_size)
 
         self.final_layers = nn.Sequential(
             nn.ReLU(),
             nn.Linear(in_features=self.lstm_hidden_size, out_features=output_labels),
         )
 
-        self.hn = None
-        self.cn = None
+    def forward(self, sound_batch):
+        # batch_size = len(sound_batch)
 
+        # hn = torch.zeros((batch_size, self.lstm_hidden_size)).cuda(0)
+        # cn = torch.zeros((batch_size, self.lstm_hidden_size)).cuda(0)
+        output, (hn, cn) = self.lstm(sound_batch)
 
-    def forward(self, chunk):
-        batch_size = len(chunk)
-
-        # add channel dimension back in
-        chunk = chunk[:, None, :, :]
-
-        self.hn = torch.zeros((batch_size, self.lstm_hidden_size)).cuda(0)
-        self.cn = torch.zeros((batch_size, self.lstm_hidden_size)).cuda(0)
-
-        # last dimension will be short probably
-        self.hn, self.cn = self.lstm(self.conv_layers(chunk), (self.hn, self.cn))
-
-        return self.final_layers(self.hn)
+        return self.final_layers(hn.view(-1, self.lstm_hidden_size))
 
 class AudioDataset(IterableDataset):
-    def __init__(self, sounds_dirname, num_sounds, shuffle = False, sorted = False) -> None:
+    def __init__(self, sounds_dirname, num_sounds, shuffle = False, sorted = False, max_classes=2) -> None:
         super().__init__()
         self.db = AudioDatabase()
         self.labelled_filepaths = []
@@ -119,11 +89,13 @@ class AudioDataset(IterableDataset):
         label_names = []
         complete_labelled_filepaths = []
 
-        for label_dir in sounds_dir.iterdir():
-            if label_dir.is_dir():
-                label_names.append(label_dir.name)
-                for audio_file in label_dir.iterdir():
-                    complete_labelled_filepaths.append((label_dir.name, str(audio_file)))
+        label_dirs = list(sounds_dir.iterdir())
+        if shuffle:
+            random.shuffle(label_dirs)
+        for label_dir in label_dirs[:max_classes]:
+            label_names.append(label_dir.name)
+            for audio_file in label_dir.iterdir():
+                complete_labelled_filepaths.append((label_dir.name, str(audio_file)))
 
 
         self.label_to_feature = {label: idx for idx, label in enumerate(label_names)}
