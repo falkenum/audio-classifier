@@ -21,7 +21,7 @@ CAT_DOG_SOUNDS_DIR = f"{PREFIX_DIR}/cat-dog-sounds/"
 MUSIC_SOUNDS_DIR = f"{PREFIX_DIR}/music-sounds/"
 BIRD_SOUNDS_DIR = f"{PREFIX_DIR}/bird-sounds/"
 SAMPLE_RATE = 44100
-FFT_SIZE = 2048
+FFT_SIZE = 1024
 NUM_INPUT_FEATURES = FFT_SIZE//2+1
 # NUM_MELS = 2048
 FREESOUND_AUTH_PATH = f"{PREFIX_DIR}/freesound_auth.json"
@@ -37,7 +37,7 @@ if not os.path.exists(PICKLE_DIR):
 class ConvModel(torch.nn.Module):
     def __init__(self, output_labels) -> None:
         super().__init__()
-        self.conv_chunk_width = 4096 # about 12 seconds per chunk
+        self.conv_chunk_width = 64
 
         self.layers = nn.Sequential(
             nn.Conv2d(in_channels=1, out_channels=8, kernel_size=5, padding='same'),
@@ -47,13 +47,13 @@ class ConvModel(torch.nn.Module):
             nn.Conv2d(in_channels=8, out_channels=16, kernel_size=3, padding='same'),
             nn.ReLU(),
             nn.BatchNorm2d(16),
-            nn.MaxPool2d((8, 16)), #batchx16x8x8
-            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding='same'),
+            nn.MaxPool2d((8, 4)), #batchx16x8x8
+            nn.Conv2d(in_channels=16, out_channels=16, kernel_size=3, padding='same'),
             nn.ReLU(),
-            nn.BatchNorm2d(32),
-            nn.MaxPool2d((8, 16)), #batchx32x2x2
+            nn.BatchNorm2d(16),
+            nn.MaxPool2d((4, 1)), #batchx32x2x2
             nn.Flatten(1, 3), #batchx128
-            nn.Linear(in_features=128, out_features=output_labels),
+            nn.Linear(in_features=64, out_features=output_labels),
         )
 
     def forward(self, chunk):

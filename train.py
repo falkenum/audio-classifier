@@ -15,15 +15,10 @@ import sys
 
 num_sounds = 200
 learning_rate = 2e-3
-# chunks_per_batch = 5
-sounds_per_batch = 5
+chunks_per_batch = 20
 epochs = 20
-SOUND_DIR = BIRD_SOUNDS_DIR
+SOUND_DIR = CAT_DOG_SOUNDS_DIR
 MODE = "conv"
-
-# sorted = False
-# if MODE == "convlstm":
-#     sorted = True
 
 sounds = AudioDataset(SOUND_DIR, num_sounds, shuffle=True, sorted=True)
 train_sounds, test_sounds = (floor(num_sounds * 0.9), ceil(num_sounds * 0.1))
@@ -42,18 +37,63 @@ class AudioLoader:
         self.chunk_queue = None
         self.next_labels = None
         self.next_sound_idx = None
+        
+        if MODE == "conv":
+            self._next_fn = AudioLoader._next_conv_mode
+        elif MODE == "lstm":
+            self._next_fn = AudioLoader._next_lstm_mode
+        else:
+            raise NotImplementedError
+    
+    def __next__(self):
+        return self._next_fn(self)
 
     def __iter__(self):
         self.chunk_queue = deque()
         self.next_sound_idx = 0
         return self
+
+    def _next_conv_mode(self):
+        while len(self.chunk_queue) < chunks_per_batch:
+            if self.next_sound_idx == len(self.inner_dataset):
+                # dropping the short batch
+                raise StopIteration
+
+            sound, label = self.inner_dataset[self.next_sound_idx]
+            self.next_sound_idx += 1
+
+            win_length = FFT_SIZE // 2
+            hop_length = win_length // 2
+            window = torch.hann_window(win_length)
+
+            # pad such that the output chunks are a multiple of the chunk size
+            sound = torch.stft(sound, n_fft=FFT_SIZE, win_length=win_length, 
+                hop_length=hop_length, window=window, normalized=True, return_complex=True).abs()
+
+            output_len = sound.shape[2]
+            output_pad = model.conv_chunk_width - output_len % model.conv_chunk_width
+            sound = nn.functional.pad(sound, (0, output_pad), value=0.0)
+
+            data_chunks = torch.split(sound, model.conv_chunk_width, dim=2)
+
+            self.chunk_queue.extend([(chunk, label) for chunk in data_chunks])
+            # self.next_labels = torch.tensor(sound_label_list)
+        
+        batch_list = []
+        batch_label_list = []
+        for _ in range(chunks_per_batch):
+            chunk, label = self.chunk_queue.popleft()
+            batch_list.append(chunk[None, :, : , :])
+            batch_label_list.append(label.item())
+
+        return torch.cat(batch_list).cuda(0), torch.tensor(batch_label_list).cuda(0)
     
-    def __next__(self):
+    def _next_lstm_mode(self):
         if len(self.chunk_queue) == 0:
 
             sound_batch_list = []
             sound_label_list = []
-            for _ in range(sounds_per_batch):
+            for _ in range(chunks_per_batch):
                 if self.next_sound_idx == len(self.inner_dataset):
                     raise StopIteration
 
@@ -79,7 +119,6 @@ class AudioLoader:
 
             data_chunks = torch.split(sound_batch, model.conv_chunk_width, dim=2)
 
-            # there's a short chunk at the end that we don't want, TODO fix this
             self.chunk_queue.extend(data_chunks)
             self.next_labels = torch.tensor(sound_label_list)
 
