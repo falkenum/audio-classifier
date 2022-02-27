@@ -12,15 +12,15 @@ matplotlib.use("WebAgg")
 db = AudioDatabase()
 import sys
 
-max_sounds = 200
+max_sounds = 2000
 learning_rate = 2e-3
-conv_chunks_per_batch = 40
-lstm_sounds_per_batch = 3
+conv_chunks_per_batch = 60
+lstm_sounds_per_batch = 1
 epochs = 20
 SOUND_DIR = BIRD_SOUNDS_DIR
-MODE = "lstm"
+MODE = "conv"
 
-sounds = AudioDataset(SOUND_DIR, max_sounds, shuffle=True, max_classes=5)
+sounds = AudioDataset(SOUND_DIR, max_sounds, shuffle=True, max_classes=2)
 
 train_sounds, test_sounds = (floor(len(sounds) * 0.9), ceil(len(sounds) * 0.1))
 train_data, test_data = random_split(sounds, (train_sounds, test_sounds))
@@ -31,11 +31,21 @@ if MODE == "conv":
     model = ConvModel(output_labels=sounds.num_output_features()).cuda(0)
 elif MODE == "lstm":
     model = LSTMModel(output_labels=sounds.num_output_features()).cuda(0)
+elif MODE == "convlstm":
+    model = ConvLSTM(in_channels=1, out_channels=sounds.num_output_features(), frame_height=40).cuda(0)
 
 class AudioLoader:
     def __init__(self, inner_dataset) -> None:
         self.inner_dataset = inner_dataset
         self.next_sound_idx = None
+        # self.spectrogram = torchaudio.transforms.Spectrogram(n_fft=FFT_SIZE, win_length=FFT_SIZE//2, hop_length=FFT_SIZE//4)
+        # self.to_db = torchaudio.transforms.AmplitudeToDB()
+        
+
+        # melkwargs= {
+        #     "n_mels": 256,
+        #     "n_fft": FFT_SIZE,
+        # }
         
         if MODE == "conv":
             self._next_fn = AudioLoader._next_conv_mode
@@ -43,6 +53,8 @@ class AudioLoader:
             self.next_labels = None
         elif MODE == "lstm":
             self._next_fn = AudioLoader._next_lstm_mode
+        elif MODE == "convlstm":
+            self._next_fn = AudioLoader._next_conv_lstm_mode
         else:
             raise NotImplementedError
     
@@ -56,6 +68,7 @@ class AudioLoader:
         return self
 
     def _next_conv_mode(self):
+        mfcc = torchaudio.transforms.MFCC(sample_rate=SAMPLE_RATE, n_mfcc=50, melkwargs={"n_mels": 50, "n_fft": FFT_SIZE})
         while len(self.chunk_queue) < conv_chunks_per_batch:
             if self.next_sound_idx == len(self.inner_dataset):
                 # dropping the short batch
@@ -64,17 +77,11 @@ class AudioLoader:
             sound, label = self.inner_dataset[self.next_sound_idx]
             self.next_sound_idx += 1
 
-            win_length = FFT_SIZE // 2
-            hop_length = win_length // 2
-            window = torch.hann_window(win_length)
-
-            # pad such that the output chunks are a multiple of the chunk size
-            sound = torch.stft(sound, n_fft=FFT_SIZE, win_length=win_length, 
-                hop_length=hop_length, window=window, return_complex=True).abs()
+            sound = mfcc(sound)
 
             output_len = sound.shape[2]
             output_pad = model.conv_chunk_width - output_len % model.conv_chunk_width
-            sound = nn.functional.pad(sound, (0, output_pad), value=0.0)
+            sound = nn.functional.pad(sound, (0, output_pad), value=-500.0)
 
             data_chunks = torch.split(sound, model.conv_chunk_width, dim=2)
 
@@ -111,10 +118,6 @@ class AudioLoader:
         window = torch.hann_window(win_length)
         sound_labels = torch.tensor(sound_label_list)
 
-        # pad such that the output chunks are a multiple of the chunk size
-
-        
-
         for i in range(len(sound_batch_list)):
             sound_batch_list[i] = torch.stft(sound_batch_list[i], n_fft=FFT_SIZE, win_length=win_length, 
                 hop_length=hop_length, window=window, return_complex=True).abs()[0].T # first channel
@@ -124,6 +127,32 @@ class AudioLoader:
 
         return sound_batch, sound_labels.cuda(0)
             
+    def _next_conv_lstm_mode(self):
+        sound_batch_list = []
+        sound_label_list = []
+        mfcc = torchaudio.transforms.MFCC(sample_rate=SAMPLE_RATE)
+        for _ in range(lstm_sounds_per_batch):
+            if self.next_sound_idx == len(self.inner_dataset):
+                break
+
+            sound, label = self.inner_dataset[self.next_sound_idx]
+            self.next_sound_idx += 1
+            sound_label_list.append(label)
+            # only first channel for now
+            sound_batch_list.append(sound)
+
+        if len(sound_batch_list) == 0:
+            raise StopIteration
+
+        sound_labels = torch.tensor(sound_label_list)
+
+        for i in range(len(sound_batch_list)):
+            sound_batch_list[i] = mfcc(sound_batch_list[i])[0].T
+            
+        #TODO
+        sound_batch = sound_batch_list[0][None,:,:]
+        return sound_batch[:, None, :, :].cuda(0), sound_labels.cuda(0)
+
 train_data = AudioLoader(train_data)
 test_data = AudioLoader(test_data)
 
